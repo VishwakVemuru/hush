@@ -120,7 +120,7 @@
           for (const [lag, alpha] of [[0, 0.5], [0.22, 0.28]]) {
             const q = Math.max(0, p - lag), ee = 1 - Math.pow(1 - q, 3);
             if (q <= 0) continue;
-            c.beginPath(); c.ellipse(rx, ry, r * 0.9 * ee, r * 0.62 * ee, 0, 0, Math.PI * 2);
+            c.beginPath(); c.arc(rx, ry, r * 0.8 * ee, 0, Math.PI * 2);
             c.strokeStyle = `rgba(243,239,231,${alpha * (1 - q)})`; c.lineWidth = (2.6 * (1 - q) + 0.4) * (s / 300); c.stroke();
           }
         }

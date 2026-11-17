@@ -29,6 +29,35 @@ from core.icons import IconCache  # noqa: E402
 ICO = os.path.join(BASE, "assets", "icon.ico")
 
 
+def _fresh_ui_cache(data, log):
+    """WebView2 keeps an HTTP cache and would happily keep running yesterday's app.js after an update.
+    Fingerprint the UI files; when they change, drop the cache (settings and storage are left alone)."""
+    import hashlib
+    import shutil
+    h = hashlib.sha1()
+    ui = os.path.join(BASE, "ui")
+    for name in sorted(os.listdir(ui)):
+        if name.endswith((".js", ".css", ".html")):
+            with open(os.path.join(ui, name), "rb") as f:
+                h.update(name.encode() + f.read())
+    stamp = os.path.join(data, "ui_build.txt")
+    try:
+        with open(stamp, encoding="utf-8") as f:
+            if f.read().strip() == h.hexdigest():
+                return
+    except OSError:
+        pass
+    base = os.path.join(data, "webview", "EBWebView", "Default")
+    for sub in ("Cache", "Code Cache", "GPUCache", "Service Worker"):
+        shutil.rmtree(os.path.join(base, sub), ignore_errors=True)
+    try:
+        with open(stamp, "w", encoding="utf-8") as f:
+            f.write(h.hexdigest())
+    except OSError:
+        pass
+    log.info("UI changed, cleared the webview cache")
+
+
 def main():
     data = os.path.join(os.environ.get("LOCALAPPDATA") or os.path.expanduser("~"), "hush")
     os.makedirs(data, exist_ok=True)
@@ -46,6 +75,7 @@ def main():
                                                           " --autoplay-policy=no-user-gesture-required --disable-background-timer-throttling"
                                                           " --disable-renderer-backgrounding --disable-backgrounding-occluded-windows").strip()
     import webview  # imported late so the second-instance path stays fast
+    _fresh_ui_cache(data, log)
 
     start_hidden = "--tray" in sys.argv
     db = DB(os.path.join(data, "hush.db"))
