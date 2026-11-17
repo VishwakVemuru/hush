@@ -5,10 +5,12 @@ import android.content.Intent;
 import android.content.SharedPreferences;
 import android.content.pm.PackageManager;
 import android.content.pm.ResolveInfo;
+import android.graphics.Bitmap;
 import android.graphics.Color;
 import android.graphics.Typeface;
 import android.graphics.drawable.Drawable;
 import android.graphics.drawable.GradientDrawable;
+import android.net.Uri;
 import android.os.Bundle;
 import android.os.Handler;
 import android.os.Looper;
@@ -16,9 +18,11 @@ import android.provider.Settings;
 import android.text.InputType;
 import android.view.Gravity;
 import android.view.View;
+import android.view.ViewGroup;
 import android.widget.Button;
 import android.widget.CheckBox;
 import android.widget.EditText;
+import android.widget.FrameLayout;
 import android.widget.ImageView;
 import android.widget.LinearLayout;
 import android.widget.ScrollView;
@@ -27,47 +31,387 @@ import android.widget.Toast;
 
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 
 public class MainActivity extends Activity {
-    private static final String NAVY = "#1D2A3A", MUTED = "#6B7280", BG = "#F3EFE7", CARD = "#FFFFFF", MOSS = "#5E7D5A";
+    private static final String NAVY = "#1F3550", MUTED = "#8A8274", BG = "#F3EFE7", CARD = "#FBF8F2", MOSS = "#5E8A5A",
+            SIDE = "#EBE5D9", LINE = "#E6DFD1";
     private final Handler h = new Handler(Looper.getMainLooper());
+    private int tab = 0;            // 0 phone, 1 combined, 2 blocking
+    private boolean week = false;
+    private LinearLayout body;
+    private final TextView[] tabBtns = new TextView[3];
+    private Stats.Result shown;
+    private final Map<String, String> labelToPkg = new HashMap<>();
+
+    // blocking tab
     private TextView status, a11yText;
     private Button a11yBtn;
     private EditText codeIn;
-    private LinearLayout appList;
     private final List<CheckBox> boxes = new ArrayList<>();
 
     @Override
     protected void onCreate(Bundle b) {
         super.onCreate(b);
         getWindow().setStatusBarColor(Color.parseColor(BG));
-        getWindow().getDecorView().setSystemUiVisibility(View.SYSTEM_UI_FLAG_LIGHT_STATUS_BAR);
-        ScrollView sv = new ScrollView(this);
-        sv.setBackgroundColor(Color.parseColor(BG));
-        LinearLayout col = new LinearLayout(this);
-        col.setOrientation(LinearLayout.VERTICAL);
-        col.setPadding(dp(20), dp(28), dp(20), dp(40));
-        sv.addView(col);
+        getWindow().setNavigationBarColor(Color.parseColor(BG));
+        getWindow().getDecorView().setSystemUiVisibility(View.SYSTEM_UI_FLAG_LIGHT_STATUS_BAR | View.SYSTEM_UI_FLAG_LIGHT_NAVIGATION_BAR);
+        LinearLayout root = new LinearLayout(this);
+        root.setOrientation(LinearLayout.VERTICAL);
+        root.setBackgroundColor(Color.parseColor(BG));
 
-        TextView logo = text("hush.", 40, NAVY);
+        LinearLayout top = new LinearLayout(this);
+        top.setOrientation(LinearLayout.VERTICAL);
+        top.setPadding(dp(20), dp(22), dp(20), dp(8));
+        TextView logo = text("hush.", 36, NAVY);
         logo.setTypeface(Typeface.create(Typeface.SERIF, Typeface.ITALIC));
-        col.addView(logo);
-        TextView sub = text("Your phone follows your laptop's focus sessions.", 15, MUTED);
-        sub.setPadding(0, 0, 0, dp(16));
-        col.addView(sub);
+        top.addView(logo);
+        LinearLayout tabs = new LinearLayout(this);
+        tabs.setPadding(dp(3), dp(3), dp(3), dp(3));
+        tabs.setBackground(round(SIDE, 999));
+        String[] names = {"Phone", "Combined", "Blocking"};
+        for (int i = 0; i < 3; i++) {
+            final int k = i;
+            TextView t = text(names[i], 14, MUTED);
+            t.setGravity(Gravity.CENTER);
+            t.setPadding(0, dp(8), 0, dp(8));
+            t.setOnClickListener(v -> showTab(k));
+            tabBtns[i] = t;
+            tabs.addView(t, new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1));
+        }
+        LinearLayout.LayoutParams tlp = new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
+        tlp.topMargin = dp(12);
+        top.addView(tabs, tlp);
+        root.addView(top);
 
-        // status
-        LinearLayout st = card(col);
+        ScrollView sv = new ScrollView(this);
+        body = new LinearLayout(this);
+        body.setOrientation(LinearLayout.VERTICAL);
+        body.setPadding(dp(16), dp(6), dp(16), dp(40));
+        sv.addView(body);
+        root.addView(sv, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, 0, 1));
+        setContentView(root);
+        loadLabels();
+        showTab(Link.prefs(this).getString("code", "").isEmpty() ? 2 : 0);
+    }
+
+    @Override
+    protected void onResume() {
+        super.onResume();
+        if (tab == 2) refresh.run();
+        else render();
+        // pull fresh numbers in the background, then redraw
+        new Thread(() -> {
+            Cloud.syncQuietly(MainActivity.this);
+            h.post(() -> { if (tab != 2) render(); });
+        }).start();
+    }
+
+    @Override
+    protected void onPause() {
+        h.removeCallbacks(refresh);
+        super.onPause();
+    }
+
+    private void showTab(int k) {
+        tab = k;
+        for (int i = 0; i < 3; i++) {
+            TextView t = tabBtns[i];
+            t.setBackground(i == k ? round(CARD, 999) : null);
+            t.setTextColor(Color.parseColor(i == k ? NAVY : MUTED));
+            t.setTypeface(i == k ? Typeface.DEFAULT_BOLD : Typeface.DEFAULT);
+        }
+        h.removeCallbacks(refresh);
+        body.removeAllViews();
+        if (k == 2) { buildBlocking(); refresh.run(); }
+        else render();
+    }
+
+    // =====================================================================
+    // Screen time tabs
+    // =====================================================================
+    private void render() {
+        if (tab == 2) return;
+        final boolean combined = tab == 1;
+        final boolean wk = week;
+        final int myTab = tab;
+        if (!Usage.allowed(this) && !combined) {
+            body.removeAllViews();
+            LinearLayout c = card(body);
+            c.addView(title("See your phone screen time"));
+            c.addView(text("hush. needs Usage access to read how long you use each app. It stays on your phone and your own sync.", 14, MUTED));
+            Button go = button("Allow usage access");
+            go.setOnClickListener(v -> openUsageAccess());
+            c.addView(go);
+            return;
+        }
+        new Thread(() -> {
+            final Stats.Result r = Stats.compute(MainActivity.this, combined, wk);
+            h.post(() -> { if (tab == myTab && week == wk) draw(r); });
+        }).start();
+    }
+
+    private void draw(Stats.Result r) {
+        shown = r;
+        body.removeAllViews();
+        // range toggle + share
+        LinearLayout bar = new LinearLayout(this);
+        bar.setGravity(Gravity.CENTER_VERTICAL);
+        LinearLayout seg = new LinearLayout(this);
+        seg.setPadding(dp(3), dp(3), dp(3), dp(3));
+        seg.setBackground(round(SIDE, 999));
+        String[] rn = {"Today", "Week"};
+        for (int i = 0; i < 2; i++) {
+            final boolean w = i == 1;
+            TextView t = text(rn[i], 13, w == week ? NAVY : MUTED);
+            t.setPadding(dp(16), dp(6), dp(16), dp(6));
+            if (w == week) { t.setBackground(round(CARD, 999)); t.setTypeface(Typeface.DEFAULT_BOLD); }
+            t.setOnClickListener(v -> { week = w; render(); });
+            seg.addView(t);
+        }
+        bar.addView(seg);
+        View sp = new View(this);
+        bar.addView(sp, new LinearLayout.LayoutParams(0, 1, 1));
+        TextView share = text("Share", 14, NAVY);
+        share.setPadding(dp(16), dp(8), dp(16), dp(8));
+        share.setBackground(roundStroke(CARD, LINE, 999));
+        share.setOnClickListener(v -> share());
+        bar.addView(share);
+        LinearLayout.LayoutParams blp = new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
+        blp.bottomMargin = dp(12);
+        body.addView(bar, blp);
+
+        if (r.combined && !r.hasLaptop) {
+            LinearLayout c = card(body);
+            c.addView(title("Laptop not synced yet"));
+            c.addView(text(Cloud.configured(this)
+                    ? "Waiting for your laptop's numbers. Make sure hush. is running on it."
+                    : "Connect to the same Wi-Fi as your laptop once (with hush. open) so this phone can pick up the sync settings.", 14, MUTED));
+        }
+
+        // hero
+        LinearLayout hero = card(body);
+        hero.addView(text(r.combined ? "Total screen time" : "Phone screen time", 13, MUTED));
+        TextView big = text(Stats.dur(r.total), 46, NAVY);
+        big.setTypeface(Typeface.create(Typeface.SERIF, Typeface.ITALIC));
+        hero.addView(big);
+        TextView sub = text(r.sub, 13, r.sub.startsWith("↓") ? MOSS : MUTED);
+        hero.addView(sub);
+        hero.addView(splitBar(r));
+
+        // mini metrics
+        LinearLayout row = new LinearLayout(this);
+        if (r.combined) {
+            row.addView(metric("Laptop", Stats.dur(r.laptop)), weight());
+            row.addView(metric("Phone", Stats.dur(r.phone)), weight());
+        } else {
+            row.addView(metric("Unlocks", r.unlocks >= 0 ? String.valueOf(r.unlocks) : "–"), weight());
+            row.addView(metric("Blocked", String.valueOf(r.blocked)), weight());
+        }
+        LinearLayout.LayoutParams rlp = new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
+        rlp.bottomMargin = dp(12);
+        body.addView(row, rlp);
+
+        // chart
+        LinearLayout cc = card(body);
+        cc.addView(text(r.week ? "Per day" : "By hour", 13, MUTED));
+        Charts.Bars chart = new Charts.Bars(this);
+        chart.set(r);
+        LinearLayout.LayoutParams clp = new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(170));
+        clp.topMargin = dp(10);
+        cc.addView(chart, clp);
+        cc.addView(legend(r));
+
+        // apps
+        LinearLayout ac = card(body);
+        ac.addView(text(r.combined ? "Top apps on both" : "Top apps", 13, MUTED));
+        if (r.apps.isEmpty()) ac.addView(text("Nothing yet. Use your phone and check back.", 14, MUTED));
+        long max = r.apps.isEmpty() ? 1 : r.apps.get(0).secs;
+        for (Stats.Row a : r.apps) ac.addView(appRow(a, max, r.combined));
+
+        long ok = Link.prefs(this).getLong("lastSync", 0);
+        TextView foot = text(Cloud.configured(this) ? (ok > 0 ? "Synced " + ago(ok) : "Not synced yet") : "Cloud sync not set up yet", 12, MUTED);
+        foot.setGravity(Gravity.CENTER);
+        foot.setPadding(0, dp(6), 0, 0);
+        body.addView(foot);
+    }
+
+    private View splitBar(Stats.Result r) {
+        LinearLayout wrap = new LinearLayout(this);
+        wrap.setOrientation(LinearLayout.VERTICAL);
+        wrap.setPadding(0, dp(12), 0, 0);
+        LinearLayout barv = new LinearLayout(this);
+        barv.setBackground(round(LINE, 4));
+        List<long[]> parts = new ArrayList<>();
+        List<String> names = new ArrayList<>();
+        if (r.combined) {
+            parts.add(new long[]{r.laptop, Charts.LAPTOP});
+            names.add("Laptop");
+            parts.add(new long[]{r.phone, Charts.PHONE});
+            names.add("Phone");
+        } else {
+            List<Map.Entry<String, Long>> cs = new ArrayList<>(r.cats.entrySet());
+            Collections.sort(cs, (x, z) -> Long.compare(z.getValue(), x.getValue()));
+            for (int i = 0; i < Math.min(5, cs.size()); i++) {
+                parts.add(new long[]{cs.get(i).getValue(), Charts.catColor(cs.get(i).getKey())});
+                names.add(cs.get(i).getKey());
+            }
+        }
+        long tot = 0;
+        for (long[] p : parts) tot += p[0];
+        if (tot == 0) return wrap;
+        for (long[] p : parts) {
+            if (p[0] <= 0) continue;
+            View v = new View(this);
+            v.setBackgroundColor((int) p[1]);
+            barv.addView(v, new LinearLayout.LayoutParams(0, dp(8), p[0]));
+        }
+        barv.setClipToOutline(true);
+        wrap.addView(barv);
+        LinearLayout key = new LinearLayout(this);
+        key.setPadding(0, dp(8), 0, 0);
+        for (int i = 0; i < Math.min(4, parts.size()); i++) {
+            if (parts.get(i)[0] * 100 < tot) continue; // skip slivers under 1%
+            TextView t = text("● " + names.get(i) + " " + Math.round(100.0 * parts.get(i)[0] / tot) + "%", 12, "#6E685C");
+            t.setTextColor((int) parts.get(i)[1]);
+            t.setPadding(0, 0, dp(14), 0);
+            key.addView(t);
+        }
+        wrap.addView(key);
+        return wrap;
+    }
+
+    private View legend(Stats.Result r) {
+        LinearLayout l = new LinearLayout(this);
+        l.setPadding(0, dp(8), 0, 0);
+        boolean[] used = new boolean[r.series.length];
+        for (long[] col : r.cols) for (int s = 0; s < col.length; s++) if (col[s] > 0) used[s] = true;
+        int shownCount = 0;
+        for (int s = 0; s < r.series.length && shownCount < 5; s++) {
+            if (!used[s]) continue;
+            TextView t = text("● " + r.series[s], 12, MUTED);
+            t.setTextColor(Charts.seriesColor(r, s));
+            t.setPadding(0, 0, dp(12), 0);
+            l.addView(t);
+            shownCount++;
+        }
+        return l;
+    }
+
+    private View appRow(Stats.Row a, long max, boolean combined) {
+        LinearLayout line = new LinearLayout(this);
+        line.setGravity(Gravity.CENTER_VERTICAL);
+        line.setPadding(0, dp(8), 0, dp(8));
+        ImageView icon = new ImageView(this);
+        String pkg = a.pkg != null ? a.pkg : labelToPkg.get(a.name);
+        Drawable d = null;
+        if (pkg != null && "phone".equals(a.device)) {
+            try { d = getPackageManager().getApplicationIcon(pkg); } catch (Exception ignored) { }
+        }
+        if (d != null) icon.setImageDrawable(d);
+        else {
+            GradientDrawable g = round(String.format("#%06X", 0xFFFFFF & Charts.catColor(a.cat)), 8);
+            g.setAlpha(60);
+            icon.setBackground(g);
+        }
+        line.addView(icon, new LinearLayout.LayoutParams(dp(32), dp(32)));
+        LinearLayout mid = new LinearLayout(this);
+        mid.setOrientation(LinearLayout.VERTICAL);
+        mid.setPadding(dp(12), 0, dp(12), 0);
+        TextView nm = text(a.name + (combined ? ("phone".equals(a.device) ? "  · phone" : "  · laptop") : ""), 15, "#2B3440");
+        nm.setSingleLine(true);
+        mid.addView(nm);
+        FrameLayout track = new FrameLayout(this);
+        track.setBackground(round(LINE, 3));
+        View fill = new View(this);
+        fill.setBackground(round(String.format("#%06X", 0xFFFFFF & Charts.catColor(a.cat)), 3));
+        track.addView(fill, new FrameLayout.LayoutParams(0, dp(6)));
+        LinearLayout.LayoutParams tlp = new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(6));
+        tlp.topMargin = dp(6);
+        mid.addView(track, tlp);
+        final float frac = a.secs / (float) Math.max(1, max);
+        track.post(() -> {
+            ViewGroup.LayoutParams lp = fill.getLayoutParams();
+            lp.width = Math.max(dp(4), (int) (track.getWidth() * frac));
+            fill.setLayoutParams(lp);
+        });
+        line.addView(mid, new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1));
+        line.addView(text(Stats.dur(a.secs), 14, "#6E685C"));
+        return line;
+    }
+
+    private View metric(String k, String v) {
+        LinearLayout c = new LinearLayout(this);
+        c.setOrientation(LinearLayout.VERTICAL);
+        c.setPadding(dp(16), dp(12), dp(16), dp(12));
+        c.setBackground(roundStroke(CARD, LINE, 16));
+        c.addView(text(k, 13, MUTED));
+        TextView t = text(v, 26, NAVY);
+        t.setTypeface(Typeface.create(Typeface.SERIF, Typeface.NORMAL));
+        c.addView(t);
+        return c;
+    }
+
+    private LinearLayout.LayoutParams weight() {
+        LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1);
+        lp.setMarginEnd(dp(6));
+        lp.setMarginStart(dp(6));
+        return lp;
+    }
+
+    private void share() {
+        if (shown == null) return;
+        try {
+            Bitmap bm = Charts.shareCard(this, shown);
+            String name = "hush-" + (shown.combined ? "combined" : "phone") + "-" + (shown.week ? "week" : "today") + "-" + System.currentTimeMillis();
+            Uri uri = Charts.save(this, bm, name);
+            Intent send = new Intent(Intent.ACTION_SEND).setType("image/png").putExtra(Intent.EXTRA_STREAM, uri)
+                    .addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION);
+            startActivity(Intent.createChooser(send, "Share your screen time"));
+            Toast.makeText(this, "Saved to Pictures/hush", Toast.LENGTH_SHORT).show();
+        } catch (Exception e) {
+            Toast.makeText(this, "Couldn't make the picture", Toast.LENGTH_SHORT).show();
+        }
+    }
+
+    private void openUsageAccess() {
+        try {
+            startActivity(new Intent(Settings.ACTION_USAGE_ACCESS_SETTINGS, Uri.parse("package:" + getPackageName())));
+        } catch (Exception e) {
+            try { startActivity(new Intent(Settings.ACTION_USAGE_ACCESS_SETTINGS)); } catch (Exception ignored) { }
+        }
+    }
+
+    private void loadLabels() {
+        try {
+            PackageManager pm = getPackageManager();
+            for (ResolveInfo r : pm.queryIntentActivities(new Intent(Intent.ACTION_MAIN).addCategory(Intent.CATEGORY_LAUNCHER), 0))
+                labelToPkg.put(r.loadLabel(pm).toString(), r.activityInfo.packageName);
+        } catch (Exception ignored) {
+        }
+    }
+
+    private static String ago(long t) {
+        long m = (System.currentTimeMillis() - t) / 60000;
+        return m < 1 ? "just now" : m < 60 ? m + " min ago" : (m / 60) + " h ago";
+    }
+
+    // =====================================================================
+    // Blocking tab (pairing, accessibility, app picker)
+    // =====================================================================
+    private void buildBlocking() {
+        boxes.clear();
+        LinearLayout st = card(body);
         status = text("…", 17, NAVY);
         st.addView(status);
 
-        // step 1: pairing
-        LinearLayout pair = card(col);
+        LinearLayout pair = card(body);
         pair.addView(title("1 · Pair with your laptop"));
-        pair.addView(text("In hush. on your laptop, open Settings → Phone and type the 8-digit code here. Both need to be on the same Wi-Fi.", 14, MUTED));
+        pair.addView(text("In hush. on your laptop, open Settings → Phone and type the 8-digit code here. Both need to be on the same Wi-Fi the first time.", 14, MUTED));
         codeIn = new EditText(this);
         codeIn.setInputType(InputType.TYPE_CLASS_NUMBER);
         codeIn.setHint("Pairing code");
@@ -78,51 +422,42 @@ public class MainActivity extends Activity {
         connect.setOnClickListener(v -> connect());
         pair.addView(connect);
 
-        // step 2: accessibility
-        LinearLayout acc = card(col);
+        LinearLayout acc = card(body);
         acc.addView(title("2 · Turn on blocking"));
         a11yText = text("", 14, MUTED);
         acc.addView(a11yText);
         a11yBtn = button("Open accessibility settings");
         a11yBtn.setOnClickListener(v -> {
-            try {
-                startActivity(new Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS));
-            } catch (Exception e) {
-                startActivity(new Intent(Settings.ACTION_SETTINGS));
-            }
+            try { startActivity(new Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS)); } catch (Exception e) { startActivity(new Intent(Settings.ACTION_SETTINGS)); }
         });
         acc.addView(a11yBtn);
         Button info = button("App info (for \"Allow restricted settings\")");
-        info.setOnClickListener(v -> startActivity(new Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS,
-                android.net.Uri.parse("package:" + getPackageName()))));
+        info.setOnClickListener(v -> startActivity(new Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS, Uri.parse("package:" + getPackageName()))));
         acc.addView(info);
 
-        // step 3: apps
-        LinearLayout apps = card(col);
-        apps.addView(title("3 · Apps to block during focus"));
+        LinearLayout use = card(body);
+        use.addView(title("3 · Screen time"));
+        boolean ua = Usage.allowed(this);
+        use.addView(text(ua ? "Usage access is on. Your phone's screen time shows in the Phone and Combined tabs, and on your laptop."
+                : "Allow Usage access so hush. can show your phone's screen time here and on your laptop.", 14, MUTED));
+        if (!ua) {
+            Button g = button("Allow usage access");
+            g.setOnClickListener(v -> openUsageAccess());
+            use.addView(g);
+        }
+
+        LinearLayout apps = card(body);
+        apps.addView(title("4 · Apps to block during focus"));
         apps.addView(text("WhatsApp, Telegram and Discord are never blocked. While a session is running you can add apps but not remove them.", 14, MUTED));
-        appList = new LinearLayout(this);
+        LinearLayout appList = new LinearLayout(this);
         appList.setOrientation(LinearLayout.VERTICAL);
         apps.addView(appList);
-
-        setContentView(sv);
-        buildAppList();
-    }
-
-    @Override
-    protected void onResume() {
-        super.onResume();
-        refresh.run();
-    }
-
-    @Override
-    protected void onPause() {
-        h.removeCallbacks(refresh);
-        super.onPause();
+        buildAppList(appList);
     }
 
     private final Runnable refresh = new Runnable() {
         public void run() {
+            if (tab != 2) return;
             updateStatus();
             h.postDelayed(this, 2000);
         }
@@ -134,9 +469,10 @@ public class MainActivity extends Activity {
     }
 
     private void updateStatus() {
+        if (status == null) return;
         SharedPreferences p = Link.prefs(this);
         boolean enabled = a11yOn();
-        boolean stalled = enabled && !BlockService.running;  // switched on, but the phone stopped it
+        boolean stalled = enabled && !BlockService.running;
         boolean on = enabled && BlockService.running;
         a11yText.setText(on
                 ? "Blocking is on. You can close this app; blocking keeps running."
@@ -145,7 +481,7 @@ public class MainActivity extends Activity {
                 : "Find \"hush.\" under Downloaded apps (or Installed services) and turn it on. If it's greyed out: App info → ⋮ → Allow restricted settings, then try again.");
         a11yBtn.setVisibility(on ? View.GONE : View.VISIBLE);
         String code = p.getString("code", "");
-        long now = System.currentTimeMillis(), until = Link.blockUntil(this), lastOk = p.getLong("lastOk", 0);
+        long now = System.currentTimeMillis(), until = Link.blockUntil(this), lastOk = p.getLong("lastOk", 0), lastCloud = p.getLong("lastCloud", 0);
         int s = p.getInt("status", -1);
         String msg;
         String color = NAVY;
@@ -156,11 +492,12 @@ public class MainActivity extends Activity {
             long m = (until - now + 59999) / 60000;
             String label = p.getString("label", "");
             msg = "In focus" + (label.isEmpty() ? "" : " · " + label) + " · " + m + " min left";
-            if (now - lastOk > 20000) msg += "\n(laptop out of reach, still blocking)";
+            if (now - lastOk > 20000) msg += now - lastCloud < 90000 ? "\n(via the cloud)" : "\n(laptop out of reach, still blocking)";
             color = MOSS;
         } else if (s == Link.WRONG_CODE) msg = "Wrong code. Check Settings → Phone on the laptop.";
         else if (now - lastOk < 20000) msg = "Connected. Waiting for the laptop to start focus.";
-        else msg = "Looking for your laptop… Is hush. open and on the same Wi-Fi?";
+        else if (now - lastCloud < 90000) msg = "Connected through the cloud. Waiting for the laptop to start focus.";
+        else msg = "Looking for your laptop… Is hush. open on it?";
         status.setText(msg);
         status.setTextColor(Color.parseColor(color));
         boolean locked = until > now;
@@ -174,10 +511,12 @@ public class MainActivity extends Activity {
             Toast.makeText(this, "The code has 8 digits", Toast.LENGTH_SHORT).show();
             return;
         }
-        Link.prefs(this).edit().putString("code", code).putString("laptopId", "").putInt("fails", 99).apply();
+        Link.prefs(this).edit().putString("code", code).putString("laptopId", "").putInt("fails", 99).putLong("lastScan", 0)
+                .putLong("cfgTry", 0).apply();
         status.setText("Looking for your laptop…");
         new Thread(() -> {
             final int r = Link.poll(MainActivity.this);
+            if (r == Link.OK) Cloud.syncQuietly(MainActivity.this);
             h.post(() -> {
                 Toast.makeText(MainActivity.this, r == Link.OK ? "Paired with your laptop" : r == Link.WRONG_CODE
                         ? "Laptop found, but the code is wrong" : "Couldn't find hush. on this Wi-Fi", Toast.LENGTH_LONG).show();
@@ -186,7 +525,7 @@ public class MainActivity extends Activity {
         }).start();
     }
 
-    private void buildAppList() {
+    private void buildAppList(LinearLayout appList) {
         PackageManager pm = getPackageManager();
         Intent i = new Intent(Intent.ACTION_MAIN).addCategory(Intent.CATEGORY_LAUNCHER);
         List<ResolveInfo> all = pm.queryIntentActivities(i, 0);
@@ -211,11 +550,7 @@ public class MainActivity extends Activity {
             line.setGravity(Gravity.CENTER_VERTICAL);
             line.setPadding(0, dp(6), 0, dp(6));
             ImageView icon = new ImageView(this);
-            try {
-                Drawable d = pm.getApplicationIcon(pkg);
-                icon.setImageDrawable(d);
-            } catch (Exception ignored) {
-            }
+            try { icon.setImageDrawable(pm.getApplicationIcon(pkg)); } catch (Exception ignored) { }
             line.addView(icon, new LinearLayout.LayoutParams(dp(32), dp(32)));
             boolean allowed = Link.ALWAYS_ALLOWED.contains(pkg);
             CheckBox cb = new CheckBox(this);
@@ -259,14 +594,24 @@ public class MainActivity extends Activity {
         LinearLayout c = new LinearLayout(this);
         c.setOrientation(LinearLayout.VERTICAL);
         c.setPadding(dp(16), dp(14), dp(16), dp(14));
-        GradientDrawable bg = new GradientDrawable();
-        bg.setColor(Color.parseColor(CARD));
-        bg.setCornerRadius(dp(16));
-        c.setBackground(bg);
+        c.setBackground(roundStroke(CARD, LINE, 18));
         LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT);
         lp.bottomMargin = dp(12);
         parent.addView(c, lp);
         return c;
+    }
+
+    private GradientDrawable round(String color, int radiusDp) {
+        GradientDrawable g = new GradientDrawable();
+        g.setColor(Color.parseColor(color));
+        g.setCornerRadius(dp(radiusDp));
+        return g;
+    }
+
+    private GradientDrawable roundStroke(String color, String stroke, int radiusDp) {
+        GradientDrawable g = round(color, radiusDp);
+        g.setStroke(Math.max(1, dp(1) / 2 + 1), Color.parseColor(stroke));
+        return g;
     }
 
     private TextView title(String s) {

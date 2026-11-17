@@ -33,12 +33,36 @@ def lan_ip():
 
 
 class PhoneLink:
-    def __init__(self, db, engine, hub, apk_path):
-        self.db, self.engine, self.hub, self.apk_path = db, engine, hub, apk_path
+    MAX_FAILS = 8          # wrong codes allowed per address ...
+    LOCK_SECS = 15 * 60    # ... before it's locked out for this long
+
+    def __init__(self, db, engine, hub, apk_path, cloud=None):
+        self.db, self.engine, self.hub, self.apk_path, self.cloud = db, engine, hub, apk_path, cloud
         self.seen = 0.0
         self.seen_name = ""
         self.server = None
         self.code = db.get("phone_code") or self._new_code()
+        self.fails = {}        # ip -> [count, first_fail_time, locked_until]
+        self.flock = threading.Lock()
+
+    def check_code(self, ip, given):
+        """Constant-time code check with a per-address lockout, so the 8 digits can't be brute-forced."""
+        now = time.time()
+        with self.flock:
+            f = self.fails.get(ip)
+            if f and f[2] > now:
+                return None  # locked out
+            if hmac.compare_digest(str(given), self.code):
+                self.fails.pop(ip, None)
+                return True
+            if not f or now - f[1] > self.LOCK_SECS:
+                f = [0, now, 0.0]
+            f[0] += 1
+            if f[0] >= self.MAX_FAILS:
+                f[2] = now + self.LOCK_SECS
+                log.warning("phone link: %s locked out after %d wrong codes", ip, f[0])
+            self.fails[ip] = f
+            return False
 
     def _new_code(self):
         code = f"{secrets.randbelow(10 ** 8):08d}"
@@ -48,6 +72,8 @@ class PhoneLink:
     def regenerate(self):
         self.code = self._new_code()
         self.seen = 0.0
+        with self.flock:
+            self.fails.clear()
         return self.info()
 
     def laptop_id(self):
@@ -80,9 +106,17 @@ class PhoneLink:
                 self.wfile.write(body)
 
             def _authed(self):
+                """True if the code is right; otherwise sends 403 (wrong) or 429 (locked out) and returns False."""
                 qs = parse_qs(urlparse(self.path).query)
                 given = self.headers.get("X-Hush-Code") or (qs.get("code") or [""])[0]
-                return hmac.compare_digest(str(given), link.code)
+                ok = link.check_code(self.client_address[0], given)
+                if ok:
+                    return True
+                if ok is None:
+                    self._send(429, {"error": "too many wrong codes, try again later"})
+                else:
+                    self._send(403, {"error": "wrong code"})
+                return False
 
             def do_GET(self):
                 path = urlparse(self.path).path
@@ -92,15 +126,22 @@ class PhoneLink:
                     return self._apk()
                 if path == "/":
                     return self._page()
+                if path == "/cloud":
+                    # hands the paired phone the sync address + key, so it can sync away from home Wi-Fi
+                    if not self._authed():
+                        return
+                    cfg = link.cloud.share_config() if link.cloud else None
+                    return self._send(200, cfg or {"url": "", "key": ""})
                 if path == "/state":
                     if not self._authed():
-                        return self._send(403, {"error": "wrong code"})
+                        return
                     link.seen = time.time()
                     link.seen_name = str(self.headers.get("X-Hush-Device") or "")[:60]
                     st = link.engine.state()
                     return self._send(200, {"focus": link.engine.blocking_active(), "left": st["left"],
                                             "paused": st["paused"], "phase": st["phase"], "label": st["label"],
-                                            "mode": st["mode"], "id": link.laptop_id()})
+                                            "mode": st["mode"], "id": link.laptop_id(),
+                                            "cloud": bool(link.cloud and link.cloud.enabled)})
                 self._send(404)
 
             def do_POST(self):
@@ -108,7 +149,7 @@ class PhoneLink:
                 if path != "/blocked":
                     return self._send(404)
                 if not self._authed():
-                    return self._send(403, {"error": "wrong code"})
+                    return
                 n = int(self.headers.get("Content-Length") or 0)
                 try:
                     data = json.loads(self.rfile.read(min(n, 4096)) or b"{}")

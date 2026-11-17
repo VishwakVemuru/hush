@@ -38,7 +38,7 @@
     $$('.avatar[data-icon]', root).forEach(el => { const u = got[el.dataset.icon]; if (u) { el.innerHTML = `<img alt="" src="${u}">`; el.classList.add('has-img'); } });
   }
 
-  let api, B = {}, S = null, lastEv = 0, offset = 0, view = 'focus', range = 'day', blockTab = 'apps';
+  let api, B = {}, S = null, lastEv = 0, offset = 0, view = 'focus', range = 'day', source = 'laptop', blockTab = 'apps', lastStats = null;
   let settings = {}, preset = [50, 10, 4], mode = 'soft', summaryShown = null, tide, prevPhase = null, tasksCache = [];
 
   /* ---------- small animation helpers ---------- */
@@ -92,9 +92,10 @@
     Sound.setVolume(settings.volume ?? 0.5); $('#vol').value = settings.volume ?? 0.5;
     SFX.enabled = settings.sfx !== false; SFX.volume = settings.sfx_volume ?? 0.35; SFX.init();
     tide = new Tide($('#tide'), { size: 300 }); tide.reduce = !!settings.reduce_motion;
+    if (location.search.includes('mock')) window.__tide = tide; // UI preview only
     await document.fonts.ready;
     wire(); renderPresets(); setMode(mode, true); greet(); loadTasks(); loadOverview();
-    requestAnimationFrame(() => { moveNavPill(); segPill($('#modeSeg')); segPill($('#rangeSeg')); });
+    requestAnimationFrame(() => { moveNavPill(); segPill($('#modeSeg')); segPill($('#rangeSeg')); segPill($('#srcSeg')); });
     stagger($('.focus-grid .side-col'));
     poll(); setInterval(poll, 500); setInterval(loadOverview, 30000); setInterval(greet, 60000);
     if (!settings.onboarded) setTimeout(onboarding, 700);
@@ -139,10 +140,19 @@
       if (t.classList.contains('toggle')) SFX.play(t.classList.contains('on') ? 'toggle_off' : 'toggle_on');
       else SFX.play('click');
     }, true);
-    $('#tide').addEventListener('click', () => { tide.poke(); SFX.play('click', 0.8); });
+    $('#tide').addEventListener('click', e => {
+      const b = e.currentTarget.getBoundingClientRect(), k = tide.size / b.width;
+      if (tide.poke((e.clientX - b.left) * k, (e.clientY - b.top) * k)) SFX.play('click', 0.8);
+    });
+    $('#tide').addEventListener('mousemove', e => {
+      const b = e.currentTarget.getBoundingClientRect(), k = tide.size / b.width;
+      e.currentTarget.style.cursor = tide.inWater((e.clientX - b.left) * k, (e.clientY - b.top) * k) ? 'pointer' : 'default';
+    });
     $$('.nav-item').forEach(b => b.onclick = () => go(b.dataset.view));
     $$('#modeSeg button').forEach(b => b.onclick = () => { if (!S || S.phase === 'idle') setMode(b.dataset.mode); });
     $$('#rangeSeg button').forEach(b => b.onclick = () => { range = b.dataset.r; $$('#rangeSeg button').forEach(x => x.classList.toggle('on', x === b)); segPill($('#rangeSeg')); loadStats(); });
+    $$('#srcSeg button').forEach(b => b.onclick = () => { source = b.dataset.s; $$('#srcSeg button').forEach(x => x.classList.toggle('on', x === b)); segPill($('#srcSeg')); loadStats(true); });
+    $('#shareBtn').onclick = () => shareStats();
     $$('#blockTabs button').forEach(b => b.onclick = () => { blockTab = b.dataset.t; $$('#blockTabs button').forEach(x => x.classList.toggle('on', x === b)); tabLine(); renderBlock(); });
     $('#sMinus').onclick = () => { preset[2] = Math.max(1, preset[2] - 1); $('#sCount').textContent = preset[2]; renderDots(); };
     $('#sPlus').onclick = () => { preset[2] = Math.min(12, preset[2] + 1); $('#sCount').textContent = preset[2]; renderDots(); };
@@ -158,12 +168,37 @@
     });
     $('#vol').oninput = e => Sound.setVolume(+e.target.value);
     $('#vol').onchange = e => api.set_setting('volume', +e.target.value);
-    window.addEventListener('resize', () => { moveNavPill(); segPill($('#modeSeg')); segPill($('#rangeSeg')); if (view === 'block') tabLine(); });
+    window.addEventListener('resize', () => { moveNavPill(); segPill($('#modeSeg')); segPill($('#rangeSeg')); segPill($('#srcSeg')); if (view === 'block') tabLine(); });
+    $('#zenBtn').onclick = () => zen(true);
+    $('#zenExit').onclick = () => zen(false);
+    $('#zenMain').onclick = () => mainAction();
+    addEventListener('resize', () => { if (zenOn) sizeZen(); });
     document.addEventListener('keydown', e => {
       if (e.target.tagName === 'INPUT') return;
+      if (e.key === 'Escape' && zenOn && !$('.scrim')) { zen(false); return; }
+      if ((e.key === 'f' || e.key === 'F') && !e.ctrlKey && !e.altKey && !$('.scrim') && (view === 'focus' || zenOn)) { zen(!zenOn); return; }
+      if (e.code === 'Space' && zenOn && !$('.scrim')) { e.preventDefault(); mainAction(); return; }
       if (e.code === 'Space' && view === 'focus' && !$('.scrim')) { e.preventDefault(); mainAction(); }
       if (!e.ctrlKey && !e.altKey && !e.metaKey && ['1', '2', '3', '4'].includes(e.key) && !$('.scrim')) go(['focus', 'stats', 'block', 'settings'][+e.key - 1]);
     });
+  }
+
+  /* ---------- full-screen timer ---------- */
+  let zenOn = false;
+  function sizeZen() {
+    const s = Math.floor(Math.max(260, Math.min(innerWidth * 0.86, innerHeight - 230)));
+    tide.resize(s);
+  }
+  function zen(on) {
+    if (on === zenOn) return;
+    zenOn = on;
+    const cv = $('#tide');
+    if (on) { $('#zenTide').appendChild(cv); sizeZen(); }
+    else { $('#tideWrap').appendChild(cv); tide.resize(300); }
+    document.body.classList.toggle('zen-on', on);
+    $('#zen').setAttribute('aria-hidden', String(!on));
+    try { api.set_fullscreen && api.set_fullscreen(on); } catch (e) {}
+    renderFocusState && S && renderFocusState();
   }
 
   /* ---------- focus ---------- */
@@ -243,6 +278,7 @@
   function renderFocusState() {
     const idle = S.phase === 'idle', hard = S.mode === 'hard';
     $('#v-focus').classList.toggle('focusing', S.phase === 'focus' && !S.paused);
+    document.body.classList.toggle('zen-focus', S.phase === 'focus' && !S.paused);
     $('#setup').classList.toggle('hide', !idle);
     $('#modeSeg').style.opacity = idle ? 1 : .5;
     if (!idle && mode !== S.mode) setMode(S.mode, true);
@@ -262,6 +298,8 @@
     if (document.activeElement !== li && !idle && li.value !== S.label) li.value = S.label;
     li.readOnly = !idle;
     renderDots();
+    // full-screen view mirrors the main button and session dots (both are our own markup)
+    if (zenOn) { $('#zenMain').innerHTML = $('#bMain').innerHTML; $('#zenDots').innerHTML = $('#sessDots').innerHTML; }
     // blocked card
     $('#blockedTxt').innerHTML = S.phase === 'focus'
       ? (S.blocked ? `Blocked <b>${S.blocked}</b> attempt${S.blocked > 1 ? 's' : ''} this session. Stay with it.` : 'Blocking is on. Nothing tried yet, nice.')
@@ -346,80 +384,225 @@
   }
 
   /* ---------- stats ---------- */
-  async function loadStats() {
-    const st = await api.stats(range);
+  const SRC_NAME = { laptop: 'Laptop', phone: 'Phone', all: 'Laptop + phone' };
+  const DEV_COL = { laptop: '#3E6A9E', phone: '#C9A15A' };
+  const niceMax = v => { const steps = [900, 1800, 3600, 5400, 7200, 10800, 14400, 21600, 28800, 43200]; return steps.find(s => s >= v) || Math.ceil(v / 3600) * 3600; };
+  const tickLabel = s => s >= 3600 ? (s % 3600 ? (s / 3600).toFixed(1) + 'h' : s / 3600 + 'h') : Math.round(s / 60) + 'm';
+  const hourName = h => `${(h % 12) || 12}${h < 12 ? 'am' : 'pm'}`;
+
+  async function loadStats(fresh) {
+    if (fresh || !lastStats || Date.now() - (loadStats._pulled || 0) > 60000) {
+      // pull the phone's latest numbers in the background, then re-render if anything arrived
+      loadStats._pulled = Date.now();
+      if (api.cloud_refresh) api.cloud_refresh().then(r => { if (r && r.changed && view === 'stats') loadStats(); syncNote(r && r.status); }).catch(() => {});
+    }
+    const st = await api.stats(range, source);
+    lastStats = st;
+    const today = new Date().toLocaleDateString(undefined, { weekday: 'long', day: 'numeric', month: 'long' });
     $('#statsTitle').textContent = { day: 'Today', week: 'This week', month: 'Last 30 days' }[range];
-    const fmts = { dur, pct: v => v == null ? '–' : Math.round(v) + '%', num: v => String(Math.round(v)) };
-    const cards = $('#cards');
-    if (!cards.children.length) cards.innerHTML = st.cards.map(() => `<div class="card metric"><p class="label"></p><div class="v">0</div><div class="d"></div></div>`).join('');
+    $('#statsSub').textContent = (range === 'day' ? today : 'Where your time went') + ' · ' + SRC_NAME[source];
+    renderCards(st);
+    if (source === 'phone' && !st.has_phone) { renderNoPhone(); return; }
+    $$('.stats-grid, #apps').forEach(e => e.closest('.card, .stats-grid').style.display = '');
+    renderBars(st); renderCats(st); renderApps(st);
+  }
+
+  function renderNoPhone() {
+    $('.stats-grid').style.display = 'none';
+    $('#apps').innerHTML = `<div class="empty-state"><div class="h">No phone data yet</div>
+      Open the hush. app on your phone, pair it (Settings → Phone here), and allow <b>Usage access</b> when it asks.<br>Your phone's screen time then shows up here, from anywhere.</div>`;
+  }
+
+  function renderCards(st) {
+    const fmts = { dur, pct: v => v == null ? '–' : Math.round(v) + '%', num: v => v == null ? '–' : String(Math.round(v)) };
+    const el = $('#cards');
+    const sig = st.cards.map(c => c.label).join('|');
+    if (el.dataset.sig !== sig) {
+      el.dataset.sig = sig;
+      el.innerHTML = st.cards.map((c, i) => `<div class="card metric ${i === 0 ? 'hero' : ''}"><p class="label"></p><div class="v">0</div><div class="d"></div>${i === 0 ? '<div class="split" id="heroSplit"></div>' : ''}</div>`).join('');
+      stagger(el);
+    }
     st.cards.forEach((c, i) => {
-      const el = cards.children[i];
-      $('.label', el).textContent = c.label; $('.d', el).textContent = c.sub; $('.d', el).className = 'd ' + c.tone;
-      const v = $('.v', el); if (c.label === 'Blocked') v.style.color = c.value ? '#9A7A3E' : '';
+      const card = el.children[i];
+      $('.label', card).textContent = c.label;
+      const d = $('.d', card); d.textContent = c.sub; d.className = 'd ' + c.tone;
+      const v = $('.v', card); v.classList.toggle('warn', c.fmt === 'num' && /Blocked/.test(c.label) && !!c.value);
       countTo(v, c.value, fmts[c.fmt]);
     });
-    if (!cards._staggered) { stagger(cards); cards._staggered = 1; }
-    renderBars(st); renderDonut(st); renderApps(st);
+    // hero: a thin bar showing where the time went (devices in combined, categories otherwise)
+    const split = $('#heroSplit'); if (!split) return;
+    let parts;
+    if (st.source === 'all') {
+      const lap = st.cards[1].value || 0, pho = st.cards[2].value || 0;
+      parts = [{ n: 'Laptop', s: lap, c: DEV_COL.laptop }, { n: 'Phone', s: pho, c: DEV_COL.phone }];
+    } else parts = st.cats.slice(0, 6).map(c => ({ n: c.name, s: c.secs, c: c.color }));
+    const tot = parts.reduce((a, b) => a + b.s, 0);
+    split.innerHTML = tot ? `<div class="split-bar">${parts.filter(p => p.s > 0).map(p => `<span style="flex:${p.s};background:${p.c}" title="${esc(p.n)} · ${dur(p.s)}"></span>`).join('')}</div>
+      <div class="split-key">${parts.filter(p => p.s > 0).slice(0, 4).map(p => `<span><i style="background:${p.c}"></i>${esc(p.n)} <b>${Math.round(p.s / tot * 100)}%</b></span>`).join('')}</div>` : '';
   }
+
   function renderBars(st) {
     const bars = $('#bars'); bars.classList.remove('grown');
     const colors = B.colors;
-    let cols, max, axis;
+    let cols, max, axis, legend;
     if (st.range === 'day') {
+      // only show the part of the day you were actually up (at least 8 hours wide)
+      const active = st.hours.map((h, i) => Object.values(h).reduce((a, b) => a + b, 0) > 30 ? i : -1).filter(i => i >= 0);
+      let a = active.length ? Math.max(0, active[0] - 1) : 8, b = active.length ? Math.min(23, active[active.length - 1] + 1) : 22;
+      while (b - a < 8) { if (a > 0) a--; if (b - a < 8 && b < 23) b++; if (a === 0 && b === 23) break; }
       $('#chartTitle').textContent = 'By hour';
-      cols = st.hours.map((h, i) => ({ segs: Object.entries(h).map(([c, s]) => ({ c: colors[c] || '#D6CFC1', s, name: c })), label: i, tip: `${(i % 12) || 12}${i < 12 ? 'am' : 'pm'} · ${dur(Object.values(h).reduce((a, b) => a + b, 0))}` }));
-      max = 3600;
-      axis = `<span>12am</span><span>6am</span><span>12pm</span><span>6pm</span><span>11pm</span>`;
-      $('#axis').className = 'axis';
+      cols = [];
+      for (let i = a; i <= b; i++) {
+        const h = st.hours[i], tot = Object.values(h).reduce((x, y) => x + y, 0);
+        cols.push({ segs: Object.entries(h).map(([c, s]) => ({ c: colors[c] || '#D6CFC1', s, name: c })), tip: `${hourName(i)}–${hourName((i + 1) % 24)} · ${dur(tot)}`, lab: hourName(i), showLab: (i - a) % Math.ceil((b - a + 1) / 8) === 0 });
+      }
+      max = niceMax(Math.max(900, ...cols.map(c => c.segs.reduce((x, y) => x + y.s, 0))));
+      const used = [...new Set(st.hours.flatMap(h => Object.keys(h)))];
+      legend = used.slice(0, 5).map(c => `<span><i style="background:${colors[c] || '#D6CFC1'}"></i>${esc(c)}</span>`).join('');
     } else {
-      $('#chartTitle').textContent = 'Focus vs everything else';
-      cols = st.days.map(d => ({ segs: [{ c: '#3E6A9E', s: d.focus, name: 'Focus' }, { c: '#D3CBBB', s: d.other, name: 'Other' }], today: d.today, tip: `${d.label} · ${dur(d.focus)} focus · ${dur(d.focus + d.other)} total`, lab: d.label }));
-      max = Math.max(3600, ...st.days.map(d => d.focus + d.other));
-      axis = st.days.map((d, i) => `<span>${st.range === 'week' || i % 5 === 0 || d.today ? d.label : ''}</span>`).join('');
-      $('#axis').className = 'axis days';
+      const [na, nb] = st.series, ca = st.source === 'all' ? DEV_COL.laptop : '#3E6A9E', cb = st.source === 'all' ? DEV_COL.phone : st.source === 'phone' ? '#C9A15A' : '#D3CBBB';
+      $('#chartTitle').textContent = st.source === 'laptop' ? 'Focus vs everything else' : st.source === 'phone' ? 'Phone time per day' : 'Laptop and phone per day';
+      cols = st.days.map((d, i) => ({ segs: [{ c: ca, s: d.a, name: na }, { c: cb, s: d.b, name: nb }], today: d.today,
+        tip: `${d.label} · ${dur(d.a + d.b)}${na && d.a ? ` · ${dur(d.a)} ${na.toLowerCase()}` : ''}`, lab: d.label, showLab: st.range === 'week' || i % 5 === 0 || d.today }));
+      max = niceMax(Math.max(1800, ...st.days.map(d => d.a + d.b)));
+      legend = [[na, ca], [nb, cb]].filter(x => x[0]).map(([n, c]) => `<span><i style="background:${c}"></i>${n}</span>`).join('')
+        + (st.avg ? `<span><i class="avg-key"></i>avg ${dur(st.avg)}</span>` : '');
     }
-    bars.style.gap = st.range === 'month' ? '3px' : '4px';
+    // gridlines
+    const ticks = [0, max / 2, max];
+    $('#grid').innerHTML = ticks.map(t => `<div class="gl" style="bottom:${t / max * 100}%"><span>${t ? tickLabel(t) : ''}</span></div>`).join('')
+      + (st.range !== 'day' && st.avg ? `<div class="gl avg" style="bottom:${Math.min(100, st.avg / max * 100)}%"></div>` : '');
+    bars.style.gap = st.range === 'month' ? '3px' : '6px';
     bars.innerHTML = cols.map((col, i) => {
       const tot = col.segs.reduce((a, b) => a + b.s, 0);
       const h = Math.min(100, tot / max * 100);
       const segs = col.segs.filter(x => x.s > 0).sort((a, b) => b.s - a.s).map(x => `<span style="height:${x.s / (tot || 1) * 100}%;background:${x.c}"></span>`).join('');
       return `<div class="bar-col ${col.today ? 'today' : ''}">${tot > 30 ? `<div class="stack" style="height:${Math.max(2, h)}%;transition-delay:${i * (st.range === 'month' ? 12 : 22)}ms">${segs}</div>` : '<div class="empty"></div>'}<div class="tip">${esc(col.tip)}</div></div>`;
     }).join('');
-    $('#axis').innerHTML = axis;
-    const used = st.range === 'day' ? [...new Set(st.hours.flatMap(h => Object.keys(h)))] : ['Focus', 'Other'];
-    $('#legend').innerHTML = used.map(c => `<span><i style="background:${st.range === 'day' ? colors[c] : c === 'Focus' ? '#3E6A9E' : '#D3CBBB'}"></i>${c}</span>`).join('');
+    $('#axis').className = 'axis cols'; $('#axis').style.gap = bars.style.gap;
+    $('#axis').innerHTML = cols.map(c => `<span>${c.showLab ? esc(c.lab) : ''}</span>`).join('');
+    $('#legend').innerHTML = legend;
     requestAnimationFrame(() => requestAnimationFrame(() => bars.classList.add('grown')));
   }
-  function renderDonut(st) {
-    const tot = st.cats.reduce((a, b) => a + b.secs, 0), C = 2 * Math.PI * 15.9155;
-    const svg = $('#donut');
-    let acc = 0;
-    const segs = st.cats.map(c => { const len = c.secs / tot * 100; const o = { ...c, len, off: acc }; acc += len; return o; });
-    svg.innerHTML = `<circle cx="21" cy="21" r="15.9155" stroke="#ECE6DA"></circle>` + segs.map(s => `<circle cx="21" cy="21" r="15.9155" stroke="${s.color}" stroke-dasharray="0 100" stroke-dashoffset="0"></circle>`).join('');
-    requestAnimationFrame(() => requestAnimationFrame(() => {
-      [...svg.querySelectorAll('circle')].slice(1).forEach((c, i) => {
-        const s = segs[i]; c.style.transitionDelay = i * 80 + 'ms';
-        c.setAttribute('stroke-dasharray', `${Math.max(0, s.len - 0.6)} ${100 - Math.max(0, s.len - 0.6)}`);
-        c.setAttribute('stroke-dashoffset', String(-s.off));
-      });
-    }));
-    const prod = st.cats.filter(c => ['Study', 'Code'].includes(c.name)).reduce((a, b) => a + b.secs, 0);
-    countTo($('#donutV'), tot ? Math.round(prod / tot * 100) : null, v => v == null ? '–' : Math.round(v) + '%');
-    $('#donutK').textContent = 'study + code';
-    $('#catList').innerHTML = st.cats.slice(0, 8).map(c => `<span><i style="background:${c.color}"></i>${c.name}<b>${dur(c.secs)}</b></span>`).join('') || '<span class="sub">No data yet</span>';
+
+  function renderCats(st) {
+    const tot = st.cats.reduce((a, b) => a + b.secs, 0);
+    $('#catTotal').textContent = tot ? dur(tot) : '';
+    $('#catStack').innerHTML = tot ? st.cats.map(c => `<span style="flex:${c.secs};background:${c.color}" title="${esc(c.name)}"></span>`).join('') : '';
+    const max = st.cats[0] ? st.cats[0].secs : 1;
+    $('#catList').innerHTML = st.cats.slice(0, 7).map((c, i) => `<div class="cat-row" style="--i:${i}">
+        <span class="nm"><i style="background:${c.color}"></i>${esc(c.name)}</span>
+        <span class="track"><span style="width:${c.secs / max * 100}%;background:${c.color}"></span></span>
+        <span class="pc">${Math.round(c.secs / tot * 100)}%</span><b>${dur(c.secs)}</b></div>`).join('')
+      || '<div class="sub" style="padding:14px 0">Nothing yet</div>';
   }
+
   function renderApps(st) {
     const el = $('#apps');
+    $('#appsTitle').textContent = st.source === 'all' ? 'Top apps on both' : st.source === 'phone' ? 'Top phone apps' : 'Top apps';
     if (!st.apps.length) { el.innerHTML = `<div class="empty-state"><div class="h">Nothing tracked yet</div>Leave hush. running and your day fills in here.</div>`; return; }
-    const max = st.apps[0].secs;
+    const max = st.apps[0].secs, tot = st.total || 1;
     el.innerHTML = st.apps.map((a, i) => `<div class="app-row" style="--i:${i}">
       ${avatar(a.name, a.color)}
-      <div class="nm" title="${esc(a.name)}">${esc(a.name)}</div>
+      <div class="nm" title="${esc(a.name)}">${esc(a.name)}${st.source === 'all' ? `<span class="dev ${a.device}">${ic(a.device === 'phone' ? 'phone' : 'desktop')}</span>` : ''}</div>
       <div class="track"><div style="width:${a.secs / max * 100}%;background:${a.color}"></div></div>
-      <div class="tm">${dur(a.secs)}</div>
-      <select data-name="${esc(a.name)}">${B.categories.map(c => `<option ${c === a.cat ? 'selected' : ''}>${c}</option>`).join('')}</select></div>`).join('');
+      <div class="tm">${dur(a.secs)}<small>${Math.round(a.secs / tot * 100)}%</small></div>
+      <button class="cat-chip" data-name="${esc(a.name)}" style="--c:${a.color}">${esc(a.cat)}</button></div>`).join('');
     hydrateIcons(el);
-    $$('#apps select').forEach(s => s.onchange = async () => { await api.set_category(s.dataset.name, s.value); toast(`${s.dataset.name} is now ${s.value}`, 'success'); loadStats(); });
+    $$('#apps .cat-chip').forEach(b => b.onclick = e => { e.stopPropagation(); catMenu(b); });
+  }
+
+  function catMenu(btn) {
+    $$('.cat-menu').forEach(m => m.remove());
+    const m = document.createElement('div'); m.className = 'cat-menu';
+    m.innerHTML = B.categories.map(c => `<button data-c="${esc(c)}" class="${c === btn.textContent ? 'on' : ''}"><i style="background:${B.colors[c] || '#D6CFC1'}"></i>${esc(c)}</button>`).join('');
+    document.body.appendChild(m);
+    const r = btn.getBoundingClientRect();
+    m.style.left = Math.min(innerWidth - m.offsetWidth - 12, r.right - m.offsetWidth) + 'px';
+    m.style.top = (r.bottom + m.offsetHeight + 8 > innerHeight ? r.top - m.offsetHeight - 6 : r.bottom + 6) + 'px';
+    const close = () => { m.remove(); document.removeEventListener('mousedown', out); };
+    const out = e => { if (!m.contains(e.target)) close(); };
+    setTimeout(() => document.addEventListener('mousedown', out), 0);
+    $$('button', m).forEach(b => b.onclick = async () => { close(); await api.set_category(btn.dataset.name, b.dataset.c); toast(`${btn.dataset.name} is now ${b.dataset.c}`, 'success'); loadStats(); });
+  }
+
+  function syncNote(s) {
+    const n = $('#syncNote'); if (!n) return;
+    if (!s || !s.enabled) { n.innerHTML = ''; return; }
+    const ago = s.last_ok ? Math.round((Date.now() / 1000 - s.last_ok) / 60) : null;
+    n.innerHTML = `${ic('cloud')}${s.ok ? `Synced${ago ? ` ${ago} min ago` : ' just now'}` : 'Offline, showing the last synced numbers'}${s.phone_days ? ` · ${s.phone_days} day${s.phone_days > 1 ? 's' : ''} of phone data` : ''}`;
+  }
+
+  /* ---------- share card ---------- */
+  function drawShareCard(st) {
+    const W = 1080, H = 1350, cv = document.createElement('canvas'); cv.width = W; cv.height = H;
+    const c = cv.getContext('2d');
+    const serif = '"Instrument Serif", Georgia, serif', sans = '"Segoe UI Variable Text","Segoe UI",system-ui,sans-serif';
+    const g = c.createLinearGradient(0, 0, 0, H); g.addColorStop(0, '#FBF8F2'); g.addColorStop(1, '#EFE8DC'); c.fillStyle = g; c.fillRect(0, 0, W, H);
+    // soft water at the bottom
+    c.fillStyle = 'rgba(62,106,158,.10)'; c.beginPath(); c.moveTo(0, H - 170);
+    for (let x = 0; x <= W; x += 10) c.lineTo(x, H - 170 + Math.sin(x / 90) * 14); c.lineTo(W, H); c.lineTo(0, H); c.fill();
+    c.fillStyle = 'rgba(62,106,158,.16)'; c.beginPath(); c.moveTo(0, H - 120);
+    for (let x = 0; x <= W; x += 10) c.lineTo(x, H - 120 + Math.sin(x / 70 + 2) * 12); c.lineTo(W, H); c.lineTo(0, H); c.fill();
+    const P = 90;
+    c.fillStyle = '#1F3550'; c.font = `italic 64px ${serif}`; c.textBaseline = 'alphabetic'; c.fillText('hush.', P, 150);
+    c.fillStyle = '#8A8274'; c.font = `500 30px ${sans}`;
+    const when = { day: new Date().toLocaleDateString(undefined, { weekday: 'long', day: 'numeric', month: 'long' }), week: 'This week', month: 'Last 30 days' }[st.range];
+    c.fillText(`${SRC_NAME[st.source]} screen time · ${when}`, P, 215);
+    c.fillStyle = '#1F3550'; c.font = `italic 190px ${serif}`; c.fillText(dur(st.total), P - 6, 420);
+    c.fillStyle = st.cards[0].tone === 'good' ? '#5E8A5A' : '#6E685C'; c.font = `500 32px ${sans}`; c.fillText(st.cards[0].sub, P, 480);
+    // split bar
+    let y = 550;
+    const parts = st.source === 'all' ? [{ n: 'Laptop', s: st.cards[1].value || 0, c: DEV_COL.laptop }, { n: 'Phone', s: st.cards[2].value || 0, c: DEV_COL.phone }]
+      : st.cats.slice(0, 5).map(x => ({ n: x.name, s: x.secs, c: x.color }));
+    const tot = parts.reduce((a, b) => a + b.s, 0) || 1;
+    let x = P; const bw = W - 2 * P;
+    c.save(); c.beginPath(); c.roundRect(P, y, bw, 26, 13); c.clip();
+    parts.forEach(p => { const w = p.s / tot * bw; c.fillStyle = p.c; c.fillRect(x, y, w + 1, 26); x += w; }); c.restore();
+    y += 70; x = P; c.font = `500 28px ${sans}`;
+    parts.slice(0, 4).forEach(p => { c.fillStyle = p.c; c.beginPath(); c.arc(x + 9, y - 9, 9, 0, 7); c.fill(); c.fillStyle = '#2B3440'; const t = `${p.n} ${Math.round(p.s / tot * 100)}%`; c.fillText(t, x + 28, y); x += c.measureText(t).width + 64; });
+    // top apps
+    y += 90; c.fillStyle = '#8A8274'; c.font = `600 26px ${sans}`; c.fillText('TOP APPS', P, y); y += 30;
+    const apps = st.apps.slice(0, 5), amax = apps[0] ? apps[0].secs : 1;
+    apps.forEach(a => {
+      y += 72;
+      c.fillStyle = '#2B3440'; c.font = `500 36px ${sans}`;
+      let nm = a.name; while (c.measureText(nm).width > 430 && nm.length > 3) nm = nm.slice(0, -2) + '…';
+      c.fillText(nm, P, y);
+      c.fillStyle = '#E6DFD1'; c.beginPath(); c.roundRect(P + 460, y - 20, 330, 14, 7); c.fill();
+      c.fillStyle = a.color; c.beginPath(); c.roundRect(P + 460, y - 20, Math.max(14, 330 * a.secs / amax), 14, 7); c.fill();
+      c.fillStyle = '#6E685C'; c.font = `500 32px ${sans}`; c.textAlign = 'right'; c.fillText(dur(a.secs), W - P, y); c.textAlign = 'left';
+    });
+    c.fillStyle = '#1F3550'; c.globalAlpha = .55; c.font = `italic 34px ${serif}`; c.fillText('made with hush. · calm focus', P, H - 54); c.globalAlpha = 1;
+    return cv;
+  }
+
+  async function shareStats() {
+    let st = lastStats; if (!st) return;
+    const pick = { laptop: st.source === 'laptop', phone: st.source === 'phone', all: st.source === 'all' };
+    modal(`<h2>Share your screen time</h2>
+      <div class="seg share-seg" id="shareSrc"><div class="seg-pill"></div>${['laptop', 'phone', 'all'].map(s => `<button data-s="${s}" class="${pick[s] ? 'on' : ''}">${SRC_NAME[s].replace('Laptop + phone', 'Combined')}</button>`).join('')}</div>
+      <div class="share-prev"><img id="shareImg" alt="Screen time card"></div>
+      <div class="acts"><button class="btn" data-copy>${ic('copy')}Copy image</button><button class="btn primary" data-save>${ic('download')}Save image</button></div>`, (s, close) => {
+      let cur = st, cv;
+      const draw = async () => { cv = drawShareCard(cur); $('#shareImg', s).src = cv.toDataURL('image/png'); };
+      draw(); requestAnimationFrame(() => segPill($('#shareSrc', s)));
+      $$('#shareSrc button', s).forEach(b => b.onclick = async () => {
+        $$('#shareSrc button', s).forEach(x => x.classList.toggle('on', x === b)); segPill($('#shareSrc', s));
+        cur = await api.stats(range, b.dataset.s); draw();
+      });
+      $('[data-save]', s).onclick = async () => {
+        const p = await api.save_image(cv.toDataURL('image/png'), `hush-${cur.source}-${cur.range}`);
+        if (p) { toast('Saved to Downloads', 'success'); close(); } else toast('Could not save the image', 'block');
+      };
+      $('[data-copy]', s).onclick = async () => {
+        try {
+          const blob = await new Promise(r => cv.toBlob(r, 'image/png'));
+          await navigator.clipboard.write([new ClipboardItem({ 'image/png': blob })]);
+          toast('Copied. Paste it into WhatsApp, Discord or anywhere.', 'success');
+        } catch (e) { toast('Copy isn\'t available here. Use Save image instead.', 'block'); }
+      };
+    });
   }
 
   /* ---------- blocklist ---------- */
@@ -520,12 +703,13 @@
         <div class="set-row"><div><div class="t">Start with Windows</div><div class="d">Opens quietly in the tray</div></div>${sw(B.startup, 'id="startupT"')}</div>
         <div class="set-row"><div><div class="t">Reduce motion</div><div class="d">Calmer, near-instant transitions</div></div>${sw(s.reduce_motion, 'id="motionT"')}</div>
         <div class="set-row"><div><div class="t">Turn off browser Secure DNS</div><div class="d">${B.admin ? 'Lets the system-wide site block work in Chrome, Brave, Edge and Firefox' : 'Needs admin. Only matters for the system-wide block.'}</div></div>${B.admin ? sw(s.doh_off, 'id="dohT"') : '<span class="tag">admin only</span>'}</div>
+        <div class="set-row"><div><div class="t">Mini timer</div><div class="d">A small floating timer while a session runs, shown only when you minimize hush.</div></div>${sw(s.mini_mode !== 'off', 'id="miniT"')}</div>
         <div class="set-row"><div><div class="t">Keep running in the tray</div><div class="d">Closing the window hides hush. so tracking continues. Quit from the tray icon.</div></div><span class="tag">always on</span></div>
         <div class="set-row"><div><div class="t">Desktop shortcut</div><div class="d">Adds hush. to your desktop and Start menu</div></div><button class="btn sm" id="shortcutBtn">${ic('desktop')}Add again</button></div>
       </div>
       <div class="card">
         <p class="label"><span>About</span></p>
-        <div class="set-row"><div><div class="t" style="font-family:var(--serif);font-style:italic;font-size:22px;color:var(--navy)">hush.</div><div class="d">Version 1.2 · made for deep work</div></div><button class="btn sm ghost" id="replayIntro">${ic('sparkle')}Replay intro</button></div>
+        <div class="set-row"><div><div class="t" style="font-family:var(--serif);font-style:italic;font-size:22px;color:var(--navy)">hush.</div><div class="d">Version 1.3 · made for deep work</div></div><button class="btn sm ghost" id="replayIntro">${ic('sparkle')}Replay intro</button></div>
         <div class="set-row"><div><div class="t">Keyboard</div><div class="d"><span class="kbd">Space</span> start / pause · <span class="kbd">1</span>–<span class="kbd">4</span> switch screens · <span class="kbd">Esc</span> close</div></div></div>
       </div>`;
     stagger(g);
@@ -557,6 +741,7 @@
     $('#phoneNew').onclick = async () => { showPhone(await api.phone_new_code()); toast('New pairing code. Enter it on your phone.', 'success'); };
     $('#exportBtn').onclick = async () => { const p = await api.export_csv(); toast('Exported to ' + p, 'success'); };
     $('#startupT').onclick = async e => { const on = !e.target.classList.contains('on'); if (await api.set_startup(on)) { e.target.classList.toggle('on', on); B.startup = on; } else toast('Could not change startup', 'block'); };
+    $('#miniT').onclick = e => { const on = !e.target.classList.contains('on'); e.target.classList.toggle('on', on); settings.mini_mode = on ? 'minimized' : 'off'; api.set_setting('mini_mode', settings.mini_mode); };
     $('#motionT').onclick = e => { const on = !e.target.classList.contains('on'); e.target.classList.toggle('on', on); settings.reduce_motion = on; api.set_setting('reduce_motion', on); document.body.classList.toggle('reduce', on); tide.reduce = on; };
     $('#dohT') && ($('#dohT').onclick = async e => { const on = !e.target.classList.contains('on'); if (await api.set_doh(on)) { e.target.classList.toggle('on', on); toast(on ? 'Secure DNS turned off. Restart your browser.' : 'Secure DNS policy removed', 'success'); } });
   }

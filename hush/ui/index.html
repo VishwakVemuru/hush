@@ -42,6 +42,7 @@
       </div>
       <div class="focus-grid">
         <div class="card timer-card">
+          <button class="btn icon ghost expand-btn" id="zenBtn" title="Full screen (F)"><svg class="i"><use href="#i-maximize"/></svg></button>
           <input class="label-input" id="labelInput" type="text" maxlength="80" placeholder="What are you focusing on?">
           <div class="tide-wrap" id="tideWrap"><canvas id="tide"></canvas></div>
           <div class="sess-dots" id="sessDots"></div>
@@ -82,22 +83,29 @@
 
     <!-- STATS -->
     <section class="view" id="v-stats">
-      <div class="head">
+      <div class="head stats-head">
         <div><h1 class="h1" id="statsTitle">Today</h1><div class="sub" id="statsSub">Where your time went</div></div>
-        <div class="seg" id="rangeSeg"><div class="seg-pill"></div>
-          <button data-r="day" class="on">Day</button><button data-r="week">Week</button><button data-r="month">Month</button>
+        <div class="stats-ctl">
+          <div class="seg" id="srcSeg"><div class="seg-pill"></div>
+            <button data-s="laptop" class="on"><svg class="i"><use href="#i-desktop"/></svg>Laptop</button><button data-s="phone"><svg class="i"><use href="#i-phone"/></svg>Phone</button><button data-s="all"><svg class="i"><use href="#i-devices"/></svg>Combined</button>
+          </div>
+          <div class="seg" id="rangeSeg"><div class="seg-pill"></div>
+            <button data-r="day" class="on">Day</button><button data-r="week">Week</button><button data-r="month">Month</button>
+          </div>
+          <button class="btn sm" id="shareBtn" title="Save or copy a picture of these stats"><svg class="i"><use href="#i-share"/></svg>Share</button>
         </div>
       </div>
-      <div class="cards4" id="cards"></div>
+      <div class="stats-top" id="cards"></div>
       <div class="stats-grid">
-        <div class="card"><p class="label"><span id="chartTitle">By hour</span></p><div class="bars" id="bars"></div><div class="axis" id="axis"></div><div class="legend" id="legend"></div></div>
-        <div class="card donut-wrap"><p class="label" style="align-self:stretch"><span>Categories</span></p>
-          <div class="donut-box"><svg class="donut" viewBox="0 0 42 42" id="donut"></svg>
-          <div class="donut-center"><div class="v" id="donutV">–</div><div class="k" id="donutK">focus</div></div></div>
-          <div class="cat-list" id="catList"></div>
+        <div class="card chart-card"><p class="label"><span id="chartTitle">By hour</span><span class="legend" id="legend"></span></p>
+          <div class="chart"><div class="grid" id="grid"></div><div class="bars" id="bars"></div></div><div class="axis" id="axis"></div></div>
+        <div class="card"><p class="label"><span>Categories</span><span id="catTotal"></span></p>
+          <div class="cat-stack" id="catStack"></div>
+          <div class="cat-rows" id="catList"></div>
         </div>
       </div>
-      <div class="card"><p class="label"><span>Top apps and sites</span><span>tap a category to change it</span></p><div id="apps" style="margin-top:6px"></div></div>
+      <div class="card"><p class="label"><span id="appsTitle">Top apps</span><span>click a category to change it</span></p><div id="apps" style="margin-top:6px"></div></div>
+      <div class="sync-note" id="syncNote"></div>
     </section>
 
     <!-- BLOCKLIST -->
@@ -116,6 +124,15 @@
       <div class="set-grid" id="settingsGrid"></div>
     </section>
   </main>
+</div>
+<div class="zen" id="zen" aria-hidden="true">
+  <div class="zen-top">
+    <span class="zen-brand">hush.</span>
+    <button class="btn icon ghost" id="zenExit" title="Exit full screen (Esc)"><svg class="i"><use href="#i-minimize"/></svg></button>
+  </div>
+  <div class="zen-tide" id="zenTide"></div>
+  <div class="zen-dots" id="zenDots"></div>
+  <div class="zen-ctrl"><button class="btn primary" id="zenMain"></button></div>
 </div>
 <div class="toasts" id="toasts"></div>
 
@@ -155,6 +172,13 @@
   <symbol id="i-trophy" viewBox="0 0 24 24"><path d="M8 21l8 0" /> <path d="M12 17l0 4" /> <path d="M7 4l10 0" /> <path d="M17 4v8a5 5 0 0 1 -10 0v-8" /> <path d="M3 9a2 2 0 1 0 4 0a2 2 0 1 0 -4 0" /> <path d="M17 9a2 2 0 1 0 4 0a2 2 0 1 0 -4 0" /></symbol>
   <symbol id="i-clock" viewBox="0 0 24 24"><path d="M3 12a9 9 0 1 0 18 0a9 9 0 0 0 -18 0" /> <path d="M12 7v5l3 3" /></symbol>
   <symbol id="i-external" viewBox="0 0 24 24"><path d="M12 6h-6a2 2 0 0 0 -2 2v10a2 2 0 0 0 2 2h10a2 2 0 0 0 2 -2v-6" /> <path d="M11 13l9 -9" /> <path d="M15 4h5v5" /></symbol>
+  <symbol id="i-maximize" viewBox="0 0 24 24"><path d="M16 4l4 0l0 4" /> <path d="M14 10l6 -6" /> <path d="M8 20l-4 0l0 -4" /> <path d="M4 20l6 -6" /> <path d="M16 20l4 0l0 -4" /> <path d="M14 14l6 6" /> <path d="M8 4l-4 0l0 4" /> <path d="M4 4l6 6" /></symbol>
+  <symbol id="i-minimize" viewBox="0 0 24 24"><path d="M5 9l4 0l0 -4" /> <path d="M3 3l6 6" /> <path d="M5 15l4 0l0 4" /> <path d="M3 21l6 -6" /> <path d="M19 9l-4 0l0 -4" /> <path d="M15 9l6 -6" /> <path d="M19 15l-4 0l0 4" /> <path d="M15 15l6 6" /></symbol>
+  <symbol id="i-share" viewBox="0 0 24 24"><path d="M8 9h-1a2 2 0 0 0 -2 2v8a2 2 0 0 0 2 2h10a2 2 0 0 0 2 -2v-8a2 2 0 0 0 -2 -2h-1" /> <path d="M12 14v-11" /> <path d="M9 6l3 -3l3 3" /></symbol>
+  <symbol id="i-copy" viewBox="0 0 24 24"><path d="M7 9.667a2.667 2.667 0 0 1 2.667 -2.667h8.666a2.667 2.667 0 0 1 2.667 2.667v8.666a2.667 2.667 0 0 1 -2.667 2.667h-8.666a2.667 2.667 0 0 1 -2.667 -2.667l0 -8.666" /> <path d="M4.012 16.737a2.005 2.005 0 0 1 -1.012 -1.737v-10c0 -1.1 .9 -2 2 -2h10c.75 0 1.158 .385 1.5 1" /></symbol>
+  <symbol id="i-phone" viewBox="0 0 24 24"><path d="M6 5a2 2 0 0 1 2 -2h8a2 2 0 0 1 2 2v14a2 2 0 0 1 -2 2h-8a2 2 0 0 1 -2 -2v-14" /> <path d="M11 4h2" /> <path d="M12 17v.01" /></symbol>
+  <symbol id="i-devices" viewBox="0 0 24 24"><path d="M13 9a1 1 0 0 1 1 -1h6a1 1 0 0 1 1 1v10a1 1 0 0 1 -1 1h-6a1 1 0 0 1 -1 -1v-10" /> <path d="M18 8v-3a1 1 0 0 0 -1 -1h-13a1 1 0 0 0 -1 1v12a1 1 0 0 0 1 1h9" /> <path d="M16 9h2" /></symbol>
+  <symbol id="i-cloud" viewBox="0 0 24 24"><path d="M6.657 18c-2.572 0 -4.657 -2.007 -4.657 -4.483c0 -2.475 2.085 -4.482 4.657 -4.482c.393 -1.762 1.794 -3.2 3.675 -3.773c1.88 -.572 3.956 -.193 5.444 1c1.488 1.19 2.162 3.007 1.77 4.769h.99c1.913 0 3.464 1.56 3.464 3.486c0 1.927 -1.551 3.487 -3.465 3.487h-11.878" /></symbol>
   <symbol id="i-fire" viewBox="0 0 24 24"><path d="M4 21l16 -4" /> <path d="M20 21l-16 -4" /> <path d="M12 15a4 4 0 0 0 4 -4c0 -3 -2 -3 -2 -8c-4 2 -6 5 -6 8a4 4 0 0 0 4 4" /></symbol>
 </svg>
 

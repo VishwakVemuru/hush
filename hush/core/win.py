@@ -290,6 +290,29 @@ def round_corners(title):
         pass
 
 
+def style_caption(caption="#EBE5D9", text="#1F3550", skip=("mini",)):
+    """Recolour the native Windows 11 title bar to match hush. (keeps snap, resize and the normal buttons)."""
+    if not IS_WIN:
+        return
+    def cref(h):
+        h = h.lstrip("#")
+        r, g, b = int(h[0:2], 16), int(h[2:4], 16), int(h[4:6], 16)
+        return ctypes.c_uint(r | (g << 8) | (b << 16))
+    try:
+        dwm = ctypes.windll.dwmapi
+        for hwnd, title in own_windows():
+            if any(s in title for s in skip):
+                continue
+            h = wintypes.HWND(hwnd)
+            dark = ctypes.c_int(0)
+            dwm.DwmSetWindowAttribute(h, 20, ctypes.byref(dark), 4)            # light mode caption buttons
+            dwm.DwmSetWindowAttribute(h, 35, ctypes.byref(cref(caption)), 4)  # DWMWA_CAPTION_COLOR
+            dwm.DwmSetWindowAttribute(h, 34, ctypes.byref(cref(caption)), 4)  # DWMWA_BORDER_COLOR
+            dwm.DwmSetWindowAttribute(h, 36, ctypes.byref(cref(text)), 4)     # DWMWA_TEXT_COLOR
+    except Exception:
+        pass
+
+
 # ---------- app identity, window icon, shortcuts ----------
 def set_app_id(app_id="hush.focus.app"):
     """Gives hush. its own taskbar identity (so Windows shows our icon, not Python's)."""
@@ -400,3 +423,10 @@ def extract_icons(jobs, tmp_dir):
 def open_path(path):
     if IS_WIN:
         os.startfile(path)  # noqa
+
+
+def reveal_file(path):
+    """Open Explorer with the file selected."""
+    if IS_WIN and os.path.isfile(path):
+        import subprocess
+        subprocess.Popen(["explorer", "/select,", os.path.normpath(path)])

@@ -19,6 +19,7 @@ from core.focus import FocusEngine  # noqa: E402
 from core.blocker import Blocker  # noqa: E402
 from core.bridge import Bridge  # noqa: E402
 from core.phonelink import PhoneLink  # noqa: E402
+from core.cloud import Cloud  # noqa: E402
 from core.tracker import Tracker  # noqa: E402
 from core.api import Api, DEFAULT_SETTINGS  # noqa: E402
 from core.names import DEFAULT_CATS  # noqa: E402
@@ -78,14 +79,22 @@ def main():
         s.update(db.get("settings", {}) or {})
         return s
 
-    W = {"main": None, "mini": None, "quitting": False, "mini_shown": None}
+    W = {"main": None, "mini": None, "quitting": False, "mini_shown": None,
+         "minimized": False, "max": True, "full": False, "mini_closed": False}
+
+    def close_mini():
+        """X on the mini timer: hide it until the next focus session starts."""
+        W["mini_closed"] = True
+        sync_mini()
     mini_lock = threading.Lock()
 
     def sync_mini():
-        """Mini pill is visible only while a session runs AND the main window is hidden/minimized."""
+        """Mini pill shows only while a session runs AND the main window is minimized (not when it's closed to the tray),
+        unless it's switched off in Settings."""
         if not W["mini"]:
             return
-        want = (not hub.ui_visible) and engine.state()["phase"] != "idle"
+        want = (settings().get("mini_mode", "minimized") != "off" and W["minimized"] and not W["mini_closed"]
+                and engine.state()["phase"] != "idle")
         with mini_lock:
             if want == W["mini_shown"]:
                 return
@@ -101,13 +110,32 @@ def main():
 
     def show_main():
         hub.ui_visible = True
+        W["minimized"] = False
         sync_mini()
         if W["main"]:
             W["main"].show()
-            W["main"].restore()
+            # restore() alone would drop a maximized window to normal size
+            if W["max"]:
+                W["main"].maximize()
+            else:
+                W["main"].restore()
+            win.style_caption()
+
+    def set_fullscreen(on):
+        on = bool(on)
+        if W["main"] and W["full"] != on:
+            W["full"] = on
+            try:
+                W["main"].toggle_fullscreen()
+            except Exception:
+                log.exception("fullscreen")
+        return W["full"]
 
     def hide_main():
         hub.ui_visible = False
+        W["minimized"] = False
+        if W["full"]:
+            set_fullscreen(False)
         if W["main"]:
             W["main"].hide()
         maybe_mini()
@@ -159,7 +187,8 @@ def main():
     bridge = Bridge(engine, blocker, hub, show_main)
     if not bridge.start():
         log.warning("bridge port busy; extension features disabled")
-    phone = PhoneLink(db, engine, hub, os.path.join(BASE, "phone", "hush.apk"))
+    cloud = Cloud(db, engine, categorize, data)
+    phone = PhoneLink(db, engine, hub, os.path.join(BASE, "phone", "hush.apk"), cloud)
     phone.start()
     tracker = Tracker(db, engine, blocker, bridge, settings, categorize)
     tray = Tray(show_main, toggle, quit_app, can_quit, toggle_label)
@@ -184,6 +213,7 @@ def main():
 
     def on_phase(what):
         if what == "idle":
+            W["mini_closed"] = False  # closed mini timer comes back for the next session
             sync_mini()
             if not hub.ui_visible:
                 show_main()  # show the session summary
@@ -195,14 +225,16 @@ def main():
     engine.listeners.append(on_phase)
 
     icons = IconCache(db, data)
-    ctx = {"icons": icons, "ico": ICO, "db": db, "engine": engine, "blocker": blocker, "bridge": bridge, "phone": phone, "hub": hub, "tracker": tracker,
+    ctx = {"icons": icons, "ico": ICO, "db": db, "engine": engine, "blocker": blocker, "bridge": bridge, "phone": phone, "cloud": cloud, "hub": hub, "tracker": tracker,
            "categorize": categorize, "script": os.path.join(BASE, "app.py"), "base": BASE,
-           "show_main": show_main, "hide_main": hide_main, "quit": quit_app}
+           "show_main": show_main, "hide_main": hide_main, "quit": quit_app, "fullscreen": set_fullscreen,
+           "sync_mini": lambda: sync_mini(), "close_mini": close_mini}
     api = Api(ctx)
 
     ui = lambda f: os.path.join(BASE, "ui", f)  # noqa: E731
     main_win = webview.create_window("hush.", ui("index.html"), js_api=api, width=1140, height=760,
-                                     min_size=(960, 660), background_color="#F3EFE7", hidden=start_hidden)
+                                     min_size=(960, 660), background_color="#F3EFE7", hidden=start_hidden,
+                                     maximized=True)
     mini_win = webview.create_window("hush. mini", ui("mini.html"), js_api=api, width=250, height=64,
                                      frameless=True, on_top=True, hidden=True, resizable=False, easy_drag=True,
                                      background_color="#F3EFE7")
@@ -217,15 +249,29 @@ def main():
 
     def on_minimized():
         hub.ui_visible = False
+        W["minimized"] = True
         maybe_mini()
 
     def on_restored():
+        # back to normal size (from minimized or from maximized)
         hub.ui_visible = True
+        W["minimized"] = False
+        if not W["full"]:
+            W["max"] = False
+        sync_mini()
+
+    def on_maximized():
+        # also fires when un-minimizing a maximized window, which never sends "restored"
+        hub.ui_visible = True
+        W["minimized"] = False
+        if not W["full"]:
+            W["max"] = True
         sync_mini()
 
     main_win.events.closing += on_closing
     main_win.events.minimized += on_minimized
     main_win.events.restored += on_restored
+    main_win.events.maximized += on_maximized
 
     def background():
         try:
@@ -235,12 +281,14 @@ def main():
             pass
         sync_mini()  # force the pill hidden at launch
         win.set_window_icons(ICO)
+        win.style_caption()
         if not db.get("shortcuts_v1"):
             if win.create_shortcuts(os.path.join(BASE, "app.py"), ICO):
                 db.set("shortcuts_v1", True)
                 hub.notify("Added hush. to your desktop and Start menu", "info")
         tracker.start()
         blocker.start()
+        cloud.start()
         tray.start()
         win.start_hotkey(toggle)
         if start_hidden and engine.state()["phase"] != "idle":
@@ -263,6 +311,7 @@ def main():
                     pass
             if n % 20 == 3:
                 win.set_window_icons(ICO)  # re-apply in case Windows reset it after show/hide
+                win.style_caption()
             if n % 4 == 0:
                 try:
                     tray.update(engine.state())

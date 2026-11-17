@@ -71,6 +71,12 @@ public class BlockService extends AccessibilityService {
                 if (!wasBlocking && Link.blockingNow(BlockService.this)) main.post(checkNow);
             } catch (Exception ignored) {
             }
+            // screen-time sync with the cloud: every 15 min while the phone is in use
+            long now = System.currentTimeMillis();
+            if (now - Link.prefs(BlockService.this).getLong("lastSyncTry", 0) > 15 * 60000L && screenOn()) {
+                Link.prefs(BlockService.this).edit().putLong("lastSyncTry", now).apply();
+                Cloud.syncQuietly(BlockService.this);
+            }
             if (running) net.postDelayed(this, screenOn() ? 4000 : 30000);
         }
     };
@@ -138,6 +144,11 @@ public class BlockService extends AccessibilityService {
                     .putExtra("app", label)
                     .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_CLEAR_TOP);
             startActivity(i);
+        } catch (Exception ignored) {
+        }
+        try {
+            String key = "blocked_" + Usage.iso(Usage.startOfDay(0));
+            Link.prefs(this).edit().putInt(key, Link.prefs(this).getInt(key, 0) + 1).apply();
         } catch (Exception ignored) {
         }
         Long last = lastReport.get(pkg);

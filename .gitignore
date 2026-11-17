@@ -20,3 +20,11 @@ hush/phone-app/build/
 *.keystore
 *.jks
 *.idsig
+
+# Cloudflare deploy state (account ids, keys) never goes in the repo
+.wrangler/
+wrangler.toml
+cloud.json
+
+# local Claude Code settings
+.claude/

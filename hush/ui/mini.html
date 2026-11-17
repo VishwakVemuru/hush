@@ -15,7 +15,9 @@ canvas { width: 46px; height: 46px; flex: none; }
 .l { font-size: 11px; color: #8A8274; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; margin-top: 2px; }
 .btns { position: absolute; right: 10px; display: flex; gap: 4px; opacity: 0; transform: translateX(6px); transition: opacity .25s var(--ease), transform .25s var(--ease); }
 .pill:hover .btns { opacity: 1; transform: none; }
-.pill:hover .txt { opacity: .25; }
+.pill:hover .txt { opacity: .12; }
+#cl { width: 24px; height: 24px; align-self: center; margin-left: 2px; color: #8A8274; }
+#cl svg { width: 12px; height: 12px; }
 button { width: 30px; height: 30px; border-radius: 50%; border: 1px solid #DDD5C4; background: #FBF8F2; color: #1F3550; display: grid; place-items: center; cursor: pointer; transition: transform .15s var(--ease), background .15s; padding: 0; }
 button:hover { transform: translateY(-1px); background: #fff; } button:active { transform: scale(.94); }
 button svg { width: 15px; height: 15px; stroke: currentColor; fill: none; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
@@ -31,6 +33,7 @@ button svg { width: 15px; height: 15px; stroke: currentColor; fill: none; stroke
     <button id="pp" title="Pause"><svg viewBox="0 0 24 24"><path d="M8 5v14M16 5v14"/></svg></button>
     <button id="sk" title="Skip"><svg viewBox="0 0 24 24"><path d="M6 6l8 6-8 6z"/><path d="M18 6v12"/></svg></button>
     <button id="op" title="Open hush."><svg viewBox="0 0 24 24"><path d="M14 4h6v6M20 4l-8 8M18 14v5a1 1 0 01-1 1H5a1 1 0 01-1-1V7a1 1 0 011-1h5"/></svg></button>
+    <button id="cl" title="Close the mini timer (comes back next session)"><svg viewBox="0 0 24 24"><path d="M7 7l10 10M17 7L7 17"/></svg></button>
   </div>
 </div>
 <script src="tide.js"></script>
@@ -62,6 +65,7 @@ button svg { width: 15px; height: 15px; stroke: currentColor; fill: none; stroke
     document.getElementById('pp').onclick = e => { e.stopPropagation(); (S && S.paused ? api.resume() : api.pause()).then(poll); };
     document.getElementById('sk').onclick = e => { e.stopPropagation(); api.skip().then(poll); };
     document.getElementById('op').onclick = e => { e.stopPropagation(); api.show_main(); };
+    document.getElementById('cl').onclick = e => { e.stopPropagation(); api.close_mini(); };
     document.querySelector('.pill').ondblclick = () => api.show_main();
   }
   if (window.pywebview && window.pywebview.api) start(window.pywebview.api);

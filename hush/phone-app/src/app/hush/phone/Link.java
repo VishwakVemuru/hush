@@ -139,8 +139,10 @@ final class Link {
                 r = null;
             }
         }
-        if (r == null && (host.isEmpty() || fails >= 2)) {
-            // laptop IP probably changed (DHCP): look for it on this Wi-Fi
+        long now0 = System.currentTimeMillis();
+        if (r == null && (host.isEmpty() || fails >= 2) && onWifi(c) && now0 - p.getLong("lastScan", 0) > 60000) {
+            // laptop IP probably changed (DHCP): look for it on this Wi-Fi (at most once a minute, never on mobile data)
+            p.edit().putLong("lastScan", now0).apply();
             String found = find(c, code, p.getString("laptopId", ""));
             if (found != null) {
                 host = found;
@@ -153,7 +155,11 @@ final class Link {
             }
         }
         if (r == null) {
-            p.edit().putInt("fails", fails + 1).putInt("status", UNREACHABLE).apply();
+            p.edit().putInt("fails", fails + 1).apply();
+            // away from home Wi-Fi: ask the cloud instead (every 30 s at most)
+            int viaCloud = cloudFocus(c, p);
+            if (viaCloud == OK) return OK_CLOUD;
+            p.edit().putInt("status", UNREACHABLE).apply();
             return UNREACHABLE;
         }
         if (r.code == 403) {
@@ -165,21 +171,59 @@ final class Link {
             return UNREACHABLE;
         }
         JSONObject j = r.json;
+        long now = System.currentTimeMillis();
+        applyFocus(p, j);
+        p.edit().putLong("lastOk", now).putInt("fails", 0).putInt("status", OK)
+                .putString("laptopId", j.optString("id", p.getString("laptopId", ""))).apply();
+        // first time on Wi-Fi with a laptop that has cloud sync: pick up the sync address + key
+        if (j.optBoolean("cloud", false) && !Cloud.configured(c) && now - p.getLong("cfgTry", 0) > 600000) {
+            p.edit().putLong("cfgTry", now).apply();
+            Cloud.fetchConfig(c);
+        }
+        return OK;
+    }
+
+    static final int OK_CLOUD = 4;
+
+    private static void applyFocus(SharedPreferences p, JSONObject j) {
         boolean focus = j.optBoolean("focus", false);
         boolean paused = j.optBoolean("paused", false);
         double left = j.optDouble("left", 0);
-        long now = System.currentTimeMillis();
         long until = 0;
         if (focus) {
             long ms = (long) (left * 1000);
             // paused focus still blocks on the laptop; if we lose contact while paused, give up after 15 min
             if (paused) ms = Math.min(ms, 15 * 60 * 1000L);
-            until = now + Math.max(ms, 5000);
+            until = System.currentTimeMillis() + Math.max(ms, 5000);
         }
-        p.edit().putLong("blockUntil", until).putLong("lastOk", now).putInt("fails", 0).putInt("status", OK)
-                .putString("laptopId", j.optString("id", p.getString("laptopId", "")))
-                .putString("label", j.optString("label", "")).putBoolean("paused", paused).apply();
-        return OK;
+        p.edit().putLong("blockUntil", until).putString("label", j.optString("label", "")).putBoolean("paused", paused).apply();
+    }
+
+    /** Focus state from the cloud. Returns OK if it answered; otherwise leaves blockUntil alone. */
+    private static int cloudFocus(Context c, SharedPreferences p) {
+        if (!Cloud.configured(c)) return UNREACHABLE;
+        long now = System.currentTimeMillis();
+        if (now - p.getLong("cloudFocusAt", 0) < 30000) return p.getInt("status", UNREACHABLE) == OK_CLOUD ? OK : UNREACHABLE;
+        p.edit().putLong("cloudFocusAt", now).apply();
+        try {
+            JSONObject j = Cloud.focus(c);
+            applyFocus(p, j);
+            p.edit().putLong("lastCloud", now).putInt("status", OK_CLOUD).apply();
+            return OK;
+        } catch (Exception e) {
+            return UNREACHABLE;
+        }
+    }
+
+    static boolean onWifi(Context c) {
+        try {
+            ConnectivityManager cm = (ConnectivityManager) c.getSystemService(Context.CONNECTIVITY_SERVICE);
+            android.net.NetworkCapabilities nc = cm.getNetworkCapabilities(cm.getActiveNetwork());
+            return nc != null && (nc.hasTransport(android.net.NetworkCapabilities.TRANSPORT_WIFI)
+                    || nc.hasTransport(android.net.NetworkCapabilities.TRANSPORT_ETHERNET));
+        } catch (Exception e) {
+            return true;
+        }
     }
 
     static void reportBlocked(Context c, String appLabel) {

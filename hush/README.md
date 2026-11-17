@@ -26,6 +26,23 @@ While the laptop is in focus, the phone sends the apps you pick (Instagram, Redd
 
 To rebuild the phone app run `phone-app\build.ps1` (needs the Android SDK and a JDK 17).
 
+### Optional: screen time from anywhere (Cloudflare)
+Sync laptop and phone screen time through your own free Cloudflare Worker, so **Stats → Phone / Combined** works even when you're away from home Wi-Fi.
+1. Install Node.js and run `npx wrangler login` once.
+2. Run `cloud\deploy.ps1`. It creates a `hush-sync` Worker and D1 database in your account and saves the address and key to `%LOCALAPPDATA%\hush\cloud.json` (never in the repo).
+3. Restart hush. The phone picks up the sync settings the next time it's on the same Wi-Fi as the laptop.
+
+Only daily totals are synced (app name, category, minutes, hourly totals). No window titles, no websites.
+
+## New in 1.3
+- **Full-screen timer**: the expand button (or **F**) turns the tide into a big, distraction-free timer. **Esc** to leave.
+- **Ripples where you tap**, and only when you tap the water
+- Opens **maximized**, with a **title bar coloured to match** hush.
+- **Mini timer** setting: shows only when you minimize hush., or never
+- **Stats redesign** with **Laptop / Phone / Combined** tabs, clearer charts, category bars and quick category changes
+- **Share** a picture of your screen time (laptop, phone or combined), on both laptop and phone
+- **Phone app**: phone screen time, a Combined tab, a proper icon, and cloud sync
+
 ## New in 1.2
 - **Desktop and Start menu shortcut** with the hush. icon, created automatically on first launch (Settings → Desktop shortcut to redo it)
 - **Proper taskbar icon** instead of Python's

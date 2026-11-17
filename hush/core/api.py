@@ -15,6 +15,7 @@ DEFAULT_SETTINGS = {
     "unlock": "both", "countdown_label": "", "countdown_date": "",
     "reduce_motion": False, "volume": 0.5, "last_preset": [50, 10, 4], "last_mode": "soft",
     "doh_off": False, "sfx": True, "sfx_volume": 0.35, "onboarded": False,
+    "mini_mode": "minimized",  # "minimized" = floating mini timer only when the window is minimized; "off" = never
 }
 
 
@@ -39,7 +40,7 @@ class Api:
         c = self._ctx
         return {"settings": self._settings(), "categories": CATEGORIES, "colors": CAT_COLORS,
                 "phrase": PHRASE, "admin": win.is_admin(), "startup": win.get_startup(),
-                "is_windows": win.IS_WIN, "last_event": c["hub"].last_id(), "version": "1.0"}
+                "is_windows": win.IS_WIN, "last_event": c["hub"].last_id(), "version": "1.3"}
 
     def overview(self):
         return stats.overview(self._ctx["db"], float(self._settings()["goal_hours"]))
@@ -74,8 +75,43 @@ class Api:
         return True
 
     # ---------- stats ----------
-    def stats(self, rng="day"):
-        return stats.compute(self._ctx["db"], rng, self._ctx["categorize"])
+    def stats(self, rng="day", source="laptop"):
+        c = self._ctx
+        cloud = c.get("cloud")
+        over = c["db"].categories()
+        recat = lambda name, cat: over.get(name) or cat  # noqa: E731  (your category edits apply to phone apps too)
+        return stats.compute(c["db"], rng, c["categorize"], source,
+                             cloud.phone_cache() if cloud else {}, recat)
+
+    def cloud_status(self):
+        cloud = self._ctx.get("cloud")
+        return cloud.status() if cloud else {"enabled": False}
+
+    def cloud_refresh(self):
+        cloud = self._ctx.get("cloud")
+        return {"changed": cloud.refresh(), "status": cloud.status()} if cloud else {"changed": False, "status": {"enabled": False}}
+
+    def save_image(self, data_url, name="hush-screen-time"):
+        """Saves a PNG made by the UI (share card) to Downloads and shows it in Explorer."""
+        import base64
+        import re
+        m = re.match(r"^data:image/png;base64,([A-Za-z0-9+/=]+)$", str(data_url or ""))
+        if not m:
+            return None
+        raw = base64.b64decode(m.group(1))
+        if len(raw) > 15 * 1024 * 1024:
+            return None
+        folder = os.path.join(os.path.expanduser("~"), "Downloads")
+        os.makedirs(folder, exist_ok=True)
+        safe = re.sub(r"[^a-z0-9-]+", "-", str(name).lower()).strip("-")[:60] or "hush-screen-time"
+        path = os.path.join(folder, f"{safe}-{datetime.now().strftime('%Y%m%d-%H%M%S')}.png")
+        with open(path, "wb") as f:
+            f.write(raw)
+        try:
+            win.reveal_file(path)
+        except Exception:
+            pass
+        return path
 
     def set_category(self, name, cat):
         if cat in CATEGORIES:
@@ -200,7 +236,19 @@ class Api:
         s = self._settings()
         s[key] = value
         self._ctx["db"].set("settings", s)
+        if key == "mini_mode" and self._ctx.get("sync_mini"):
+            self._ctx["sync_mini"]()
         return True
+
+    def close_mini(self):
+        f = self._ctx.get("close_mini")
+        if f:
+            f()
+        return True
+
+    def set_fullscreen(self, on):
+        f = self._ctx.get("fullscreen")
+        return f(bool(on)) if f else False
 
     def set_startup(self, enabled):
         try:
