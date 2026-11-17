@@ -1,0 +1,4 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="a11y_desc">Lets hush. close the apps you picked while your laptop is in a focus session. It only checks which app is open, never what is on screen. WhatsApp, Telegram and Discord are never blocked.</string>
+</resources>

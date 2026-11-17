@@ -1,0 +1,28 @@
+<!DOCTYPE html>
+<html lang="en"><head><meta charset="utf-8"><title>hush.</title>
+<style>
+@font-face { font-family: "Instrument Serif"; font-style: italic; src: url(instrument-serif-latin-400-italic.woff2) format("woff2"); }
+:root { --ease: cubic-bezier(0.22, 1, 0.36, 1); }
+html, body { margin: 0; height: 100%; background: #F3EFE7; color: #2B3440; font-family: "Segoe UI Variable Text", "Segoe UI", system-ui, sans-serif; }
+main { height: 100%; display: flex; flex-direction: column; align-items: center; justify-content: center; text-align: center; animation: rise .7s var(--ease) both; }
+.mark { width: 64px; height: 64px; margin-bottom: 18px; }
+.mark path { animation: drift 3.6s ease-in-out infinite; } .mark path + path { animation-direction: reverse; }
+h1 { font-family: "Instrument Serif", Georgia, serif; font-style: italic; font-weight: 400; font-size: 64px; color: #1F3550; margin: 0; line-height: 1; }
+p { color: #6E685C; font-size: 16px; margin: 12px 0 0; }
+.site { color: #3E6A9E; font-weight: 500; }
+.time { font-family: "Instrument Serif", Georgia, serif; font-style: italic; font-size: 40px; color: #3E6A9E; margin-top: 26px; font-variant-numeric: tabular-nums; }
+.lab { font-size: 13px; color: #8A8274; margin-top: 2px; }
+button { margin-top: 30px; height: 44px; padding: 0 26px; border-radius: 999px; border: 0; background: #3E6A9E; color: #F3EFE7; font: inherit; font-weight: 500; cursor: pointer; box-shadow: 0 4px 14px rgba(62,106,158,.22); transition: transform .15s var(--ease); }
+button:hover { transform: translateY(-1px); } button:active { transform: scale(.97); }
+@keyframes rise { from { opacity: 0; transform: translateY(14px); } to { opacity: 1; transform: none; } }
+@keyframes drift { 0%, 100% { transform: translateX(0); } 50% { transform: translateX(1.6px); } }
+</style></head>
+<body><main>
+  <svg class="mark" viewBox="0 0 44 44"><rect x="2" y="2" width="40" height="40" rx="12" fill="#3E6A9E"/><path d="M11 18 Q 16.5 13 22 18 T 33 18" fill="none" stroke="#8FA6C4" stroke-width="2.4" stroke-linecap="round"/><path d="M11 26 Q 16.5 21 22 26 T 33 26" fill="none" stroke="#F3EFE7" stroke-width="2.8" stroke-linecap="round"/></svg>
+  <h1>hush.</h1>
+  <p><span class="site" id="site">This</span> can wait.</p>
+  <div class="time" id="time"></div><div class="lab" id="lab"></div>
+  <button id="back">Back to work</button>
+</main>
+<script src="blocked.js"></script>
+</body></html>

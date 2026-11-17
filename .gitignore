@@ -1,0 +1,22 @@
+﻿node_modules/
+__pycache__/
+*.pyc
+.venv/
+venv/
+.env
+.env.*
+!.env.example
+*.key
+*.pem
+.DS_Store
+Thumbs.db
+
+
+*.pth
+
+
+# Android build output and signing keys
+hush/phone-app/build/
+*.keystore
+*.jks
+*.idsig

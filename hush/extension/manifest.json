@@ -1,0 +1,17 @@
+{
+  "manifest_version": 3,
+  "name": "hush. focus",
+  "version": "1.0.0",
+  "description": "Companion for the hush. focus timer: blocks distracting sites (and YouTube Shorts) during focus and adds per-site screen time.",
+  "permissions": ["declarativeNetRequest", "tabs", "alarms", "storage"],
+  "host_permissions": ["http://127.0.0.1:47321/*", "<all_urls>"],
+  "background": { "service_worker": "background.js" },
+  "content_scripts": [
+    { "matches": ["*://*.youtube.com/*"], "js": ["youtube.js"], "run_at": "document_start" }
+  ],
+  "web_accessible_resources": [
+    { "resources": ["blocked.html", "blocked.js", "instrument-serif-latin-400-italic.woff2"], "matches": ["<all_urls>"] }
+  ],
+  "action": { "default_title": "hush." },
+  "icons": { "16": "icons/icon16.png", "48": "icons/icon48.png", "128": "icons/icon128.png" }
+}

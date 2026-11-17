@@ -1,0 +1,72 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>hush. mini</title>
+<style>
+@font-face { font-family: "Instrument Serif"; font-style: italic; src: url(fonts/instrument-serif-latin-400-italic.woff2) format("woff2"); }
+:root { --ease: cubic-bezier(0.22, 1, 0.36, 1); }
+html, body { margin: 0; height: 100%; background: #F3EFE7; overflow: hidden; font-family: "Segoe UI Variable Text", "Segoe UI", system-ui, sans-serif; user-select: none; }
+.pill { position: absolute; inset: 0; background: #F3EFE7; display: flex; align-items: center; gap: 10px; padding: 0 10px 0 9px;
+  animation: pop .55s var(--ease) both; cursor: grab; }
+canvas { width: 46px; height: 46px; flex: none; }
+.txt { flex: 1; min-width: 0; transition: opacity .25s var(--ease), transform .25s var(--ease); }
+.t { font-family: "Instrument Serif", Georgia, serif; font-style: italic; font-size: 28px; color: #1F3550; line-height: 1; font-variant-numeric: tabular-nums; }
+.l { font-size: 11px; color: #8A8274; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; margin-top: 2px; }
+.btns { position: absolute; right: 10px; display: flex; gap: 4px; opacity: 0; transform: translateX(6px); transition: opacity .25s var(--ease), transform .25s var(--ease); }
+.pill:hover .btns { opacity: 1; transform: none; }
+.pill:hover .txt { opacity: .25; }
+button { width: 30px; height: 30px; border-radius: 50%; border: 1px solid #DDD5C4; background: #FBF8F2; color: #1F3550; display: grid; place-items: center; cursor: pointer; transition: transform .15s var(--ease), background .15s; padding: 0; }
+button:hover { transform: translateY(-1px); background: #fff; } button:active { transform: scale(.94); }
+button svg { width: 15px; height: 15px; stroke: currentColor; fill: none; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
+.gone { display: none; }
+@keyframes pop { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
+</style>
+</head>
+<body>
+<div class="pill pywebview-drag-region">
+  <canvas id="c"></canvas>
+  <div class="txt"><div class="t" id="t">00:00</div><div class="l" id="l">focus</div></div>
+  <div class="btns">
+    <button id="pp" title="Pause"><svg viewBox="0 0 24 24"><path d="M8 5v14M16 5v14"/></svg></button>
+    <button id="sk" title="Skip"><svg viewBox="0 0 24 24"><path d="M6 6l8 6-8 6z"/><path d="M18 6v12"/></svg></button>
+    <button id="op" title="Open hush."><svg viewBox="0 0 24 24"><path d="M14 4h6v6M20 4l-8 8M18 14v5a1 1 0 01-1 1H5a1 1 0 01-1-1V7a1 1 0 011-1h5"/></svg></button>
+  </div>
+</div>
+<script src="tide.js"></script>
+<script>
+(() => {
+  let api, S = null, offset = 0;
+  const tide = new Tide(document.getElementById('c'), { size: 46, mini: true });
+  const clock = s => { s = Math.max(0, Math.ceil(s)); const m = Math.floor(s / 60), x = s % 60; return String(m).padStart(2, '0') + ':' + String(x).padStart(2, '0'); };
+  const PAUSE = '<svg viewBox="0 0 24 24"><path d="M8 5v14M16 5v14"/></svg>', PLAY = '<svg viewBox="0 0 24 24"><path d="M8 5.5v13l10-6.5z"/></svg>';
+  async function poll() {
+    try { const r = await api.poll(1e12); S = r.state; offset = S.now - Date.now() / 1000; } catch (e) { return; }
+    const hardFocus = S.mode === 'hard' && S.phase === 'focus';
+    document.getElementById('pp').classList.toggle('gone', hardFocus);
+    document.getElementById('sk').classList.toggle('gone', hardFocus);
+    document.getElementById('pp').innerHTML = S.paused ? PLAY : PAUSE;
+    document.getElementById('l').textContent = S.paused ? 'paused' : S.phase === 'break' ? 'break · breathe' : (S.label || `focus · ${S.index} of ${S.sessions}`);
+  }
+  function frame() {
+    if (S && S.phase !== 'idle') {
+      const left = S.paused ? S.left : Math.max(0, S.ends_at - (Date.now() / 1000 + offset));
+      const frac = S.total ? left / S.total : 1;
+      tide.set({ target: S.phase === 'focus' ? frac : 1 - frac, mossT: S.phase === 'break' ? 1 : 0, ampT: S.paused ? 2 : 5, speedT: S.paused ? .25 : 1 });
+      document.getElementById('t').textContent = clock(left);
+    }
+    requestAnimationFrame(frame);
+  }
+  function start(a) {
+    api = a; poll(); setInterval(poll, 700); requestAnimationFrame(frame);
+    document.getElementById('pp').onclick = e => { e.stopPropagation(); (S && S.paused ? api.resume() : api.pause()).then(poll); };
+    document.getElementById('sk').onclick = e => { e.stopPropagation(); api.skip().then(poll); };
+    document.getElementById('op').onclick = e => { e.stopPropagation(); api.show_main(); };
+    document.querySelector('.pill').ondblclick = () => api.show_main();
+  }
+  if (window.pywebview && window.pywebview.api) start(window.pywebview.api);
+  else window.addEventListener('pywebviewready', () => start(window.pywebview.api));
+})();
+</script>
+</body>
+</html>
