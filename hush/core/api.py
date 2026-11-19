@@ -16,6 +16,7 @@ DEFAULT_SETTINGS = {
     "reduce_motion": False, "volume": 0.5, "last_preset": [50, 10, 4], "last_mode": "soft",
     "doh_off": False, "sfx": True, "sfx_volume": 0.35, "onboarded": False,
     "mini_mode": "minimized",  # "minimized" = floating mini timer only when the window is minimized; "off" = never
+    "camera_check": False,     # on-device study check during focus (face in view, no phone)
 }
 
 
@@ -82,6 +83,51 @@ class Api:
         recat = lambda name, cat: over.get(name) or cat  # noqa: E731  (your category edits apply to phone apps too)
         return stats.compute(c["db"], rng, c["categorize"], source,
                              cloud.phone_cache() if cloud else {}, recat)
+
+    # ---------- account, friends, leaderboard ----------
+    def _cloud_call(self, fn, *a):
+        from .cloud import CloudError
+        cloud = self._ctx.get("cloud")
+        if not cloud:
+            return {"error": "Cloud isn't available"}
+        try:
+            return fn(cloud, *a)
+        except CloudError as e:
+            return {"error": str(e), "status": e.status}
+
+    def account_status(self):
+        cloud = self._ctx.get("cloud")
+        return cloud.status() if cloud else {"enabled": False, "signed_in": False}
+
+    def signup(self, username, password, display=""):
+        return self._cloud_call(lambda c: c.signup(str(username or ""), str(password or ""), str(display or "")))
+
+    def login(self, username, password):
+        return self._cloud_call(lambda c: c.login(str(username or ""), str(password or "")))
+
+    def logout(self):
+        return self._cloud_call(lambda c: c.logout())
+
+    def friends(self):
+        return self._cloud_call(lambda c: c.friends())
+
+    def add_friend(self, username):
+        return self._cloud_call(lambda c: c.add_friend(str(username or "").strip().lstrip("@")))
+
+    def accept_friend(self, username):
+        return self._cloud_call(lambda c: c.accept_friend(str(username or "")))
+
+    def remove_friend(self, username):
+        return self._cloud_call(lambda c: c.remove_friend(str(username or "")))
+
+    def leaderboard(self, rng="week"):
+        return self._cloud_call(lambda c: c.leaderboard(rng if rng in ("day", "week", "month") else "week"))
+
+    # ---------- camera study check ----------
+    def presence(self, state):
+        """The UI's camera check reports present / away / phone every couple of seconds during focus."""
+        self._ctx["engine"].set_presence(str(state or ""))
+        return True
 
     def cloud_status(self):
         cloud = self._ctx.get("cloud")

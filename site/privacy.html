@@ -1,0 +1,51 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Privacy — hush.</title>
+<meta name="description" content="What hush. stores, what it syncs, and what it never collects.">
+<meta property="og:title" content="hush. privacy">
+<meta property="og:description" content="What hush. stores, what it syncs, and what it never collects.">
+<meta property="og:image" content="https://hush-focus.vercel.app/img/og.png">
+<link rel="icon" href="img/favicon.png">
+<link href="https://fonts.googleapis.com/css2?family=Schibsted+Grotesk:wght@400;500;600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<header class="top"><a class="brand" href="/" aria-label="hush. home"><img src="img/favicon.png" alt="" width="30" height="30"><span>hush.</span></a>
+  <nav aria-label="Main"><a href="/#download" class="nav-cta">Download</a></nav></header>
+<main class="legal">
+  <h1>Privacy</h1>
+  <p class="updated">Last updated 19 November 2026</p>
+  <p>hush. is a free, open-source focus app. This page explains, in plain terms, what it keeps and where.</p>
+
+  <h2>On your devices</h2>
+  <p>Your timer history, screen time (which app was in front, and for how long), tasks and settings are stored on your own laptop and phone. Browsers are recorded only as the browser; hush. does not record which websites you visit.</p>
+
+  <h2>The camera check</h2>
+  <p>The study check is off unless you turn it on. When it's on, it runs only during focus sessions and only on your laptop: Google's open MediaPipe models look at each camera frame in memory to answer two questions, "is someone at the desk?" and "is a phone visible?". Frames are never saved, uploaded or shared. Only the resulting minute counts (verified, away, phone) are kept.</p>
+
+  <h2>If you create an account</h2>
+  <p>Accounts are optional and needed only for syncing and the friends leaderboard. hush. stores, on Cloudflare:</p>
+  <ul>
+    <li>your username, the display name you choose, and a salted hash of your password (never the password itself);</li>
+    <li>one row per finished focus session: start and end time, focus minutes, verified minutes, phone and away minutes;</li>
+    <li>daily screen-time totals per app and category for your own laptop and phone, so they can show each other's numbers;</li>
+    <li>your friend list.</li>
+  </ul>
+  <p>Friends see only your display name, username, focus minutes, verified minutes and streak. They never see your apps or screen time.</p>
+
+  <h2>What hush. never does</h2>
+  <ul>
+    <li>No ads, no analytics, no tracking scripts, no selling or sharing data.</li>
+    <li>No video, photos, keystrokes, window titles or website history leave your device.</li>
+  </ul>
+
+  <h2>Deleting your data</h2>
+  <p>Local data lives in <code>%LOCALAPPDATA%\hush</code> on Windows and <code>~/Library/Application Support/hush</code> on Mac; delete the folder to remove it. To delete your account and everything synced with it, open an issue on <a href="https://github.com/VishwakVemuru/hush/issues">GitHub</a> from your account's username and it will be removed.</p>
+</main>
+<footer class="foot"><span class="brand small"><img src="img/favicon.png" alt="" width="22" height="22"><span>hush.</span></span>
+  <nav aria-label="Footer"><a href="privacy.html">Privacy</a><a href="terms.html">Terms</a><a href="https://github.com/VishwakVemuru/hush">GitHub</a></nav></footer>
+</body>
+</html>

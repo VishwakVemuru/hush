@@ -9,7 +9,9 @@ CAT_COLORS = {
 DISTRACTING = {"Games", "Social", "Entertainment"}
 
 BROWSERS = {"chrome.exe", "msedge.exe", "brave.exe", "firefox.exe", "opera.exe", "opera_gx.exe",
-            "vivaldi.exe", "arc.exe", "zen.exe"}
+            "vivaldi.exe", "arc.exe", "zen.exe",
+            # macOS process names
+            "google chrome", "brave browser", "safari", "firefox", "microsoft edge", "opera", "arc", "vivaldi", "zen"}
 
 PRETTY = {
     "code.exe": "VS Code", "cursor.exe": "Cursor", "devenv.exe": "Visual Studio", "pycharm64.exe": "PyCharm",
@@ -30,6 +32,14 @@ PRETTY = {
     "galaxyclient.exe": "GOG Galaxy", "python.exe": "Python", "pythonw.exe": "hush.", "taskmgr.exe": "Task Manager",
     "systemsettings.exe": "Settings", "applicationframehost.exe": "Windows app", "kicad.exe": "KiCad",
     "fusion360.exe": "Fusion 360", "xflr5.exe": "XFLR5", "matlab.exe": "MATLAB",
+    # macOS process names
+    "google chrome": "Chrome", "brave browser": "Brave", "safari": "Safari", "microsoft edge": "Edge",
+    "code": "VS Code", "electron": "VS Code", "finder": "Finder", "terminal": "Terminal", "iterm2": "Terminal",
+    "microsoft word": "Word", "microsoft excel": "Excel", "microsoft powerpoint": "PowerPoint",
+    "microsoft onenote": "OneNote", "pages": "Pages", "keynote": "Keynote", "numbers": "Numbers", "preview": "Preview",
+    "notes": "Notes", "xcode": "Xcode", "pycharm": "PyCharm", "steam_osx": "Steam", "minecraft": "Minecraft",
+    "roblox": "Roblox", "robloxplayer": "Roblox", "messages": "Messages", "facetime": "FaceTime", "music": "Music",
+    "tv": "Apple TV", "system settings": "Settings", "python": "Python", "hush": "hush.",
 }
 
 DEFAULT_CATS = {
@@ -45,7 +55,9 @@ DEFAULT_CATS = {
     "Counter-Strike 2": "Games", "Xbox": "Games", "Battle.net": "Games", "EA app": "Games",
     "Ubisoft Connect": "Games", "GOG Galaxy": "Games",
     "Chrome": "Browsing", "Edge": "Browsing", "Brave": "Browsing", "Firefox": "Browsing", "Opera": "Browsing",
-    "Opera GX": "Browsing",
+    "Opera GX": "Browsing", "Safari": "Browsing", "Pages": "Study", "Keynote": "Study", "Numbers": "Study",
+    "Preview": "Study", "Notes": "Study", "Xcode": "Code", "Messages": "Social", "FaceTime": "Social",
+    "Music": "Music", "Apple TV": "Entertainment",
     # sites
     "youtube.com": "Entertainment", "netflix.com": "Entertainment", "primevideo.com": "Entertainment",
     "hotstar.com": "Entertainment", "twitch.tv": "Entertainment", "jiocinema.com": "Entertainment",
@@ -65,6 +77,9 @@ LAUNCHERS = [
     ("battle.net.exe", "Battle.net"), ("eadesktop.exe", "EA app"), ("upc.exe", "Ubisoft Connect"),
     ("galaxyclient.exe", "GOG Galaxy"), ("xboxpcapp.exe", "Xbox app"), ("robloxplayerbeta.exe", "Roblox"),
     ("minecraftlauncher.exe", "Minecraft Launcher"),
+    # macOS
+    ("steam_osx", "Steam"), ("epicgameslauncher", "Epic Games Launcher"), ("battle.net", "Battle.net"),
+    ("robloxplayer", "Roblox"), ("minecraft", "Minecraft Launcher"),
 ]
 SUGGESTED_OFF = [("discord.exe", "Discord"), ("spotify.exe", "Spotify"), ("whatsapp.exe", "WhatsApp")]
 
@@ -76,7 +91,10 @@ DEFAULT_SITES = [
 
 # processes we will never kill, even if someone adds them
 PROTECTED = {"explorer.exe", "svchost.exe", "csrss.exe", "winlogon.exe", "lsass.exe", "dwm.exe", "services.exe",
-             "smss.exe", "wininit.exe", "system", "python.exe", "pythonw.exe", "taskmgr.exe", "msedgewebview2.exe"}
+             "smss.exe", "wininit.exe", "system", "python.exe", "pythonw.exe", "taskmgr.exe", "msedgewebview2.exe",
+             # macOS
+             "finder", "dock", "loginwindow", "windowserver", "systemuiserver", "python", "python3", "hush",
+             "activity monitor", "system settings", "kernel_task", "launchd"}
 
 
 def pretty(exe_name):

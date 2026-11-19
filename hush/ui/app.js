@@ -128,6 +128,7 @@
     view = v;
     if (v === 'stats') loadStats();
     if (v === 'block') loadBlock();
+    if (v === 'friends') loadFriends();
     if (v === 'settings') renderSettings();
     if (v === 'focus') stagger($('.focus-grid .side-col'));
   }
@@ -153,6 +154,7 @@
     $$('#rangeSeg button').forEach(b => b.onclick = () => { range = b.dataset.r; $$('#rangeSeg button').forEach(x => x.classList.toggle('on', x === b)); segPill($('#rangeSeg')); loadStats(); });
     $$('#srcSeg button').forEach(b => b.onclick = () => { source = b.dataset.s; $$('#srcSeg button').forEach(x => x.classList.toggle('on', x === b)); segPill($('#srcSeg')); loadStats(true); });
     $('#shareBtn').onclick = () => shareStats();
+    $$('#lbSeg button').forEach(b => b.onclick = () => { lbRange = b.dataset.r; $$('#lbSeg button').forEach(x => x.classList.toggle('on', x === b)); segPill($('#lbSeg')); renderLeaderboard(); });
     $$('#blockTabs button').forEach(b => b.onclick = () => { blockTab = b.dataset.t; $$('#blockTabs button').forEach(x => x.classList.toggle('on', x === b)); tabLine(); renderBlock(); });
     $('#sMinus').onclick = () => { preset[2] = Math.max(1, preset[2] - 1); $('#sCount').textContent = preset[2]; renderDots(); };
     $('#sPlus').onclick = () => { preset[2] = Math.min(12, preset[2] + 1); $('#sCount').textContent = preset[2]; renderDots(); };
@@ -179,7 +181,7 @@
       if ((e.key === 'f' || e.key === 'F') && !e.ctrlKey && !e.altKey && !$('.scrim') && (view === 'focus' || zenOn)) { zen(!zenOn); return; }
       if (e.code === 'Space' && zenOn && !$('.scrim')) { e.preventDefault(); mainAction(); return; }
       if (e.code === 'Space' && view === 'focus' && !$('.scrim')) { e.preventDefault(); mainAction(); }
-      if (!e.ctrlKey && !e.altKey && !e.metaKey && ['1', '2', '3', '4'].includes(e.key) && !$('.scrim')) go(['focus', 'stats', 'block', 'settings'][+e.key - 1]);
+      if (!e.ctrlKey && !e.altKey && !e.metaKey && ['1', '2', '3', '4', '5'].includes(e.key) && !$('.scrim')) go(['focus', 'stats', 'friends', 'block', 'settings'][+e.key - 1]);
     });
   }
 
@@ -298,6 +300,7 @@
     if (document.activeElement !== li && !idle && li.value !== S.label) li.value = S.label;
     li.readOnly = !idle;
     renderDots();
+    syncCamera();
     // full-screen view mirrors the main button and session dots (both are our own markup)
     if (zenOn) { $('#zenMain').innerHTML = $('#bMain').innerHTML; $('#zenDots').innerHTML = $('#sessDots').innerHTML; }
     // blocked card
@@ -605,6 +608,142 @@
     });
   }
 
+  /* ---------- camera study check ---------- */
+  const CAM_TXT = { present: 'verified · at your desk', away: 'away from desk', phone: 'phone spotted' };
+  let camErrShown = false, camLastSent = 0;
+  async function camPermission() {
+    try { await Presence.start(); if (!(S && S.phase === 'focus' && !S.paused)) Presence.stop(); return true; }
+    catch (e) {
+      toast(e && e.name === 'NotAllowedError' ? 'Camera access was blocked. Allow it and try again.' : 'Couldn\'t start the camera: ' + (e && e.message || e), 'block');
+      return false;
+    }
+  }
+  function syncCamera() {
+    if (!window.Presence) return;
+    const want = !!settings.camera_check && S && S.phase === 'focus' && !S.paused;
+    if (want && !Presence.running) Presence.start().then(() => { camErrShown = false; }).catch(e => {
+      if (!camErrShown) { camErrShown = true; toast('Study check couldn\'t use the camera, so this session counts as unverified.', 'block'); }
+    });
+    if (!want && Presence.running && !$('.cam-test')) Presence.stop();
+    const b = $('#camBadge');
+    b.hidden = !want;
+    if (want) {
+      const st = Presence.state || 'present';
+      b.className = 'cam-badge ' + st;
+      b.innerHTML = `${ic('camera')}<span>${CAM_TXT[st] || 'starting camera…'}</span>`;
+    }
+  }
+  if (window.Presence) Presence.on(st => {
+    if (!st) return;
+    // tell the focus engine (it counts verified / away / phone seconds)
+    const now = Date.now();
+    if (now - camLastSent > 1200) { camLastSent = now; try { api.presence(st); } catch (e) {} }
+    const b = $('#camBadge'); if (b && !b.hidden) { b.className = 'cam-badge ' + st; b.innerHTML = `${ic('camera')}<span>${CAM_TXT[st]}</span>`; }
+  });
+  function camTest() {
+    modal(`<h2>Camera check</h2><p>This is what the study check sees. Nothing is recorded.</p>
+      <div class="cam-test"><video id="camVid" autoplay muted playsinline></video><div class="cam-live" id="camLive">starting…</div></div>
+      <div class="acts"><button class="btn primary" data-x>Done</button></div>`, (s, close) => {
+      const v = $('#camVid', s); Presence.preview(v);
+      const wasRunning = Presence.running;
+      const off = Presence.on((st, d) => { const l = $('#camLive', s); if (l) l.innerHTML = `<b class="${st}">${CAM_TXT[st] || st}</b><span>face ${d.face ? '✓' : '–'} · person ${d.person ? '✓' : '–'} · phone ${d.phone ? '✓' : '–'}</span>`; });
+      Presence.start().catch(e => { $('#camLive', s).textContent = 'Camera unavailable: ' + (e && e.message || e); });
+      const done = () => { off(); Presence.preview(null); if (!wasRunning) Presence.stop(); syncCamera(); close(); };
+      $('[data-x]', s).onclick = done;
+    });
+  }
+
+  /* ---------- friends & leaderboard ---------- */
+  let lbRange = 'week', acct = null;
+  const initial = n => esc(String(n || '?')[0].toUpperCase());
+  async function loadFriends() {
+    acct = await api.account_status();
+    requestAnimationFrame(() => segPill($('#lbSeg')));
+    const body = $('#friendsBody');
+    $('#lbSeg').style.visibility = acct.signed_in ? '' : 'hidden';
+    if (!acct.signed_in) { renderSignIn(body); return; }
+    $('#friendsSub').textContent = `Signed in as @${acct.username}`;
+    body.innerHTML = `<div class="friends-grid"><div class="card lb-card"><p class="label"><span>Leaderboard</span><span>verified = camera saw you studying</span></p><div id="lb"><div class="sub" style="padding:18px 0">Loading…</div></div></div>
+      <div class="friends-side"><div class="card"><p class="label"><span>Add a friend</span></p>
+        <div class="add-row"><input type="text" id="addFriend" placeholder="their username" maxlength="20" autocomplete="off"><button class="btn sm primary" id="addFriendBtn">${ic('user-plus')}Add</button></div>
+        <div class="sub" style="margin-top:8px">Share yours: <b class="mono">@${esc(acct.username)}</b></div></div>
+        <div class="card" id="reqCard"><p class="label"><span>Friends</span></p><div id="friendList"></div></div>
+        <div class="acct-row"><span>${ic('cloud')}@${esc(acct.username)}</span><button class="btn sm ghost" id="logoutBtn">${ic('logout')}Log out</button></div></div></div>`;
+    $('#addFriendBtn').onclick = addFriend;
+    $('#addFriend').onkeydown = e => { if (e.key === 'Enter') addFriend(); };
+    $('#logoutBtn').onclick = async () => { await api.logout(); toast('Logged out', 'info'); loadFriends(); };
+    renderLeaderboard(); renderFriendList();
+  }
+  async function renderLeaderboard() {
+    const r = await api.leaderboard(lbRange), el = $('#lb'); if (!el) return;
+    if (r.error) { el.innerHTML = `<div class="empty-state"><div class="h">Can't load the leaderboard</div>${esc(r.error)}</div>`; return; }
+    const rows = r.rows || [], max = Math.max(1, ...rows.map(x => x.focus_s));
+    if (rows.length < 2) {
+      el.innerHTML = lbRows(rows, max) + `<div class="empty-state small"><div class="h">It's just you so far</div>Add friends by username and you'll compete here.</div>`;
+      return;
+    }
+    el.innerHTML = lbRows(rows, max);
+  }
+  function lbRows(rows, max) {
+    return rows.map((x, i) => `<div class="lb-row ${x.me ? 'me' : ''}" style="--i:${i}">
+      <div class="rk ${i === 0 && x.verified_s > 0 ? 'top' : ''}">${i === 0 && x.verified_s > 0 ? ic('crown') : i + 1}</div>
+      <div class="av">${initial(x.display)}</div>
+      <div class="who"><b>${esc(x.display)}${x.me ? ' <span class="you">you</span>' : ''}</b><span>@${esc(x.username)}${x.streak ? ` · ${ic('flame')}${x.streak}d` : ''}</span></div>
+      <div class="bars2"><div class="b2 f" style="width:${x.focus_s / max * 100}%"></div><div class="b2 v" style="width:${x.verified_s / max * 100}%"></div></div>
+      <div class="num v" title="Camera-verified focus"><b>${dur(x.verified_s)}</b><span>verified</span></div>
+      <div class="num" title="All focus time"><b>${dur(x.focus_s)}</b><span>focus</span></div></div>`).join('');
+  }
+  async function renderFriendList() {
+    const r = await api.friends(), el = $('#friendList'); if (!el) return;
+    if (r.error) { el.innerHTML = `<div class="sub">${esc(r.error)}</div>`; return; }
+    const row = (u, acts) => `<div class="fr-row"><div class="av sm">${initial(u.display)}</div><div class="who"><b>${esc(u.display)}</b><span>@${esc(u.username)}</span></div>${acts}</div>`;
+    let h = '';
+    if (r.incoming.length) h += `<div class="fr-h">Requests</div>` + r.incoming.map(u => row(u, `<button class="btn sm primary" data-acc="${esc(u.username)}">Accept</button><button class="btn sm ghost icon" title="Decline" data-rm="${esc(u.username)}">${ic('x')}</button>`)).join('');
+    if (r.friends.length) h += `<div class="fr-h">Friends · ${r.friends.length}</div>` + r.friends.map(u => row(u, `<button class="btn sm ghost icon" title="Remove friend" data-rm="${esc(u.username)}">${ic('x')}</button>`)).join('');
+    if (r.outgoing.length) h += `<div class="fr-h">Waiting for them</div>` + r.outgoing.map(u => row(u, `<span class="tag">pending</span><button class="btn sm ghost icon" title="Cancel" data-rm="${esc(u.username)}">${ic('x')}</button>`)).join('');
+    el.innerHTML = h || '<div class="sub" style="padding:6px 0">No friends yet. Add someone by their username.</div>';
+    $$('[data-acc]', el).forEach(b => b.onclick = async () => { const x = await api.accept_friend(b.dataset.acc); if (x.error) toast(x.error, 'block'); else { toast(`You and @${b.dataset.acc} are friends`, 'success'); renderFriendList(); renderLeaderboard(); } });
+    $$('[data-rm]', el).forEach(b => b.onclick = async () => { await api.remove_friend(b.dataset.rm); renderFriendList(); renderLeaderboard(); });
+  }
+  async function addFriend() {
+    const inp = $('#addFriend'), name = inp.value.trim().replace(/^@/, '').toLowerCase();
+    if (!name) return;
+    const r = await api.add_friend(name);
+    if (r.error) { toast(r.error, 'block'); return; }
+    inp.value = '';
+    toast(r.status === 'accepted' ? `You and @${name} are friends` : `Request sent to @${name}`, 'success');
+    renderFriendList(); renderLeaderboard();
+  }
+  function renderSignIn(body, mode = 'signup') {
+    $('#friendsSub').textContent = 'Compete with friends on real, camera-verified focus';
+    body.innerHTML = `<div class="signin"><div class="card signin-card">
+      <div class="tabs" id="authTabs"><button data-m="signup" class="${mode === 'signup' ? 'on' : ''}">Create account</button><button data-m="login" class="${mode === 'login' ? 'on' : ''}">Log in</button><div class="tab-line"></div></div>
+      <label>Username<input type="text" id="auU" maxlength="20" autocomplete="username" placeholder="e.g. vish_07"></label>
+      ${mode === 'signup' ? '<label>Name friends see<input type="text" id="auD" maxlength="30" placeholder="optional"></label>' : ''}
+      <label>Password<input type="password" id="auP" autocomplete="${mode === 'signup' ? 'new-password' : 'current-password'}" placeholder="${mode === 'signup' ? 'at least 8 characters' : ''}"></label>
+      <div class="auth-err" id="auErr"></div>
+      <button class="btn primary" id="auGo">${mode === 'signup' ? 'Create account' : 'Log in'}</button>
+      <p class="sub" style="margin-top:12px">Your account syncs your focus time and screen time. Friends only ever see your focus minutes and streak, never what apps you used.</p>
+    </div></div>`;
+    const on = $('#authTabs button.on'), l = $('#authTabs .tab-line');
+    requestAnimationFrame(() => { l.style.width = on.offsetWidth + 'px'; l.style.transform = `translateX(${on.offsetLeft}px)`; });
+    $$('#authTabs button').forEach(b => b.onclick = () => renderSignIn(body, b.dataset.m));
+    const go = async () => {
+      const u = $('#auU').value.trim().toLowerCase(), p = $('#auP').value, d = $('#auD') ? $('#auD').value.trim() : '';
+      $('#auErr').textContent = '';
+      if (!/^[a-z0-9_]{3,20}$/.test(u)) { $('#auErr').textContent = 'Usernames are 3–20 letters, numbers or _'; return; }
+      if (mode === 'signup' && p.length < 8) { $('#auErr').textContent = 'Use a password of at least 8 characters'; return; }
+      $('#auGo').disabled = true;
+      const r = mode === 'signup' ? await api.signup(u, p, d) : await api.login(u, p);
+      $('#auGo').disabled = false;
+      if (r.error) { $('#auErr').textContent = r.error; return; }
+      toast(mode === 'signup' ? `Welcome, @${r.username}` : `Signed in as @${r.username}`, 'success');
+      loadFriends();
+    };
+    $('#auGo').onclick = go;
+    $$('#auU, #auP, #auD').forEach(i => i && (i.onkeydown = e => { if (e.key === 'Enter') go(); }));
+  }
+
   /* ---------- blocklist ---------- */
   let blockCfg = null, blockExt = null, running = null;
   async function loadBlock() { blockCfg = await api.blocklist(); blockExt = blockCfg.ext; renderBlock(); requestAnimationFrame(tabLine); }
@@ -692,6 +831,11 @@
         <div class="set-row"><div><div class="t">Sound effects</div><div class="d">Soft chimes for start, breaks, blocks and finishing</div></div>${sw(s.sfx !== false, 'id="sfxT"')}</div>
         <div class="set-row"><div><div class="t">Effects volume</div><div class="d">Kept quiet on purpose</div></div><div style="display:flex;gap:8px;align-items:center"><input type="range" id="sfxVol" min="0" max="1" step="0.01" value="${s.sfx_volume ?? 0.35}" style="width:130px"><button class="btn sm icon" id="sfxTest" title="Preview" style="width:32px">${ic('play')}</button></div></div>
       </div>
+      <div class="card">
+        <p class="label"><span>Study check</span></p>
+        <div class="set-row"><div><div class="t">Camera study check</div><div class="d">During focus, your webcam checks you're at your desk and not on your phone. Those minutes count as <b>verified</b> on the Friends leaderboard. It all runs on this laptop: no video or pictures are saved or sent anywhere.</div></div>${sw(!!s.camera_check, 'id="camT"')}</div>
+        <div class="set-row"><div><div class="t">Test the camera</div><div class="d">See what the check sees, before a session</div></div><button class="btn sm" id="camTest">${ic('camera')}Test</button></div>
+      </div>
       <div class="card" id="phoneCard">
         <p class="label"><span>Phone</span></p>
         <div class="set-row"><div><div class="t">hush. on your Android phone</div><div class="d">While the laptop is in focus, the phone closes the apps you pick (Instagram and others). WhatsApp, Telegram and Discord always stay open. Phone and laptop need the same Wi-Fi.</div></div><span class="tag" id="phoneStatus">…</span></div>
@@ -710,7 +854,7 @@
       <div class="card">
         <p class="label"><span>About</span></p>
         <div class="set-row"><div><div class="t" style="font-family:var(--serif);font-style:italic;font-size:22px;color:var(--navy)">hush.</div><div class="d">Version 1.3 · made for deep work</div></div><button class="btn sm ghost" id="replayIntro">${ic('sparkle')}Replay intro</button></div>
-        <div class="set-row"><div><div class="t">Keyboard</div><div class="d"><span class="kbd">Space</span> start / pause · <span class="kbd">1</span>–<span class="kbd">4</span> switch screens · <span class="kbd">Esc</span> close</div></div></div>
+        <div class="set-row"><div><div class="t">Keyboard</div><div class="d"><span class="kbd">Space</span> start / pause · <span class="kbd">1</span>–<span class="kbd">5</span> switch screens · <span class="kbd">F</span> full-screen timer · <span class="kbd">Esc</span> close</div></div></div>
       </div>`;
     stagger(g);
     $$('[data-k]', g).forEach(inp => {
@@ -741,6 +885,13 @@
     $('#phoneNew').onclick = async () => { showPhone(await api.phone_new_code()); toast('New pairing code. Enter it on your phone.', 'success'); };
     $('#exportBtn').onclick = async () => { const p = await api.export_csv(); toast('Exported to ' + p, 'success'); };
     $('#startupT').onclick = async e => { const on = !e.target.classList.contains('on'); if (await api.set_startup(on)) { e.target.classList.toggle('on', on); B.startup = on; } else toast('Could not change startup', 'block'); };
+    $('#camT').onclick = async e => {
+      const on = !e.target.classList.contains('on');
+      if (on) { const ok = await camPermission(); if (!ok) return; }
+      e.target.classList.toggle('on', on); settings.camera_check = on; api.set_setting('camera_check', on); syncCamera();
+      toast(on ? 'Study check on. It runs during focus sessions.' : 'Study check off', 'success');
+    };
+    $('#camTest').onclick = () => camTest();
     $('#miniT').onclick = e => { const on = !e.target.classList.contains('on'); e.target.classList.toggle('on', on); settings.mini_mode = on ? 'minimized' : 'off'; api.set_setting('mini_mode', settings.mini_mode); };
     $('#motionT').onclick = e => { const on = !e.target.classList.contains('on'); e.target.classList.toggle('on', on); settings.reduce_motion = on; api.set_setting('reduce_motion', on); document.body.classList.toggle('reduce', on); tide.reduce = on; };
     $('#dohT') && ($('#dohT').onclick = async e => { const on = !e.target.classList.contains('on'); if (await api.set_doh(on)) { e.target.classList.toggle('on', on); toast(on ? 'Secure DNS turned off. Restart your browser.' : 'Secure DNS policy removed', 'success'); } });

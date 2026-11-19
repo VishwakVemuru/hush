@@ -28,3 +28,7 @@ cloud.json
 
 # local Claude Code settings
 .claude/
+
+# installer build output
+hush/build/
+hush/dist/

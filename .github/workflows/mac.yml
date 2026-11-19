@@ -1,0 +1,63 @@
+name: Mac build
+
+# Builds hush.app + hush-mac.dmg on a real Mac. Runs by hand (Actions tab -> Mac build -> Run workflow)
+# and on every published release, where the .dmg is attached to the release.
+on:
+  workflow_dispatch:
+  release:
+    types: [published]
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: macos-14   # Apple silicon (M1 and newer)
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install dependencies
+        working-directory: hush
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt "pyinstaller==6.11.1"
+
+      - name: Check the Mac helpers import
+        working-directory: hush
+        run: |
+          python -c "from core import win; assert win.IS_MAC; print('foreground:', win.foreground()); print('idle:', win.idle_seconds()); print('games:', len(win.detect_games()))"
+
+      - name: Build hush.app
+        working-directory: hush
+        env:
+          HUSH_VERSION: ${{ github.event.release.tag_name || '1.4.0' }}
+        run: python -m PyInstaller --noconfirm --clean --distpath dist --workpath build packaging/hush-mac.spec
+
+      - name: Smoke test (app starts and stays up)
+        working-directory: hush
+        run: |
+          ./dist/hush.app/Contents/MacOS/hush &
+          PID=$!
+          sleep 20
+          if kill -0 $PID 2>/dev/null; then echo "hush is running"; kill $PID; else echo "hush exited early"; cat ~/Library/Application\ Support/hush/hush.log || true; exit 1; fi
+
+      - name: Make the .dmg
+        working-directory: hush
+        run: |
+          mkdir -p dmg && cp -R dist/hush.app dmg/ && ln -s /Applications dmg/Applications
+          hdiutil create -volname "hush." -srcfolder dmg -ov -format UDZO dist/hush-mac.dmg
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: hush-mac
+          path: hush/dist/hush-mac.dmg
+
+      - name: Attach to the release
+        if: github.event_name == 'release'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release upload "${{ github.event.release.tag_name }}" hush/dist/hush-mac.dmg --clobber

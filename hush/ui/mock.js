@@ -35,6 +35,17 @@
       return { range: r, source: src, has_phone: true, total, cards, hours, days, avg: 9800, series: ph ? ['', 'Phone'] : all ? ['Laptop', 'Phone'] : ['Focused', 'Other'], cats, apps };
     },
     cloud_refresh: async () => ({ changed: false, status: { enabled: true, ok: true, last_ok: Date.now() / 1000 - 120, phone_days: 6 } }),
+    account_status: async () => ({ enabled: true, signed_in: !!window.__signed, username: 'alex', display: 'Alex' }),
+    signup: async u => { window.__signed = 1; return { signed_in: true, username: u }; }, login: async u => { window.__signed = 1; return { signed_in: true, username: u }; },
+    logout: async () => { window.__signed = 0; return {}; },
+    leaderboard: async () => ({ rows: [
+      { username: 'maya_r', display: 'Maya', me: false, focus_s: 41000, verified_s: 37800, sessions: 14, camera: true, streak: 9 },
+      { username: 'alex', display: 'Alex', me: true, focus_s: 36500, verified_s: 30100, sessions: 12, camera: true, streak: 12 },
+      { username: 'dev.k', display: 'Dev', me: false, focus_s: 39000, verified_s: 12000, sessions: 11, camera: true, streak: 3 },
+      { username: 'sam', display: 'Sam', me: false, focus_s: 15000, verified_s: 0, sessions: 6, camera: false, streak: 0 }] }),
+    friends: async () => ({ friends: [{ username: 'maya_r', display: 'Maya' }, { username: 'dev_k', display: 'Dev' }, { username: 'sam', display: 'Sam' }], incoming: [{ username: 'rhea', display: 'Rhea' }], outgoing: [{ username: 'arjun', display: 'Arjun' }] }),
+    add_friend: async () => ({ ok: true, status: 'pending' }), accept_friend: async () => ({ ok: true }), remove_friend: async () => ({ ok: true }),
+    presence: async () => true,
     save_image: async () => 'C:\\Users\\you\\Downloads\\hush.png', set_fullscreen: async () => true,
     phone_link: async () => ({ ip: '192.168.1.20', port: 47322, code: '12345678', connected: true, phone: 'Pixel', running: true }),
     set_category: async () => true, export_csv: async () => 'C:\\Users\\you\\Downloads',

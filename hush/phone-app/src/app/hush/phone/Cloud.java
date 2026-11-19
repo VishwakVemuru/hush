@@ -19,6 +19,64 @@ import java.util.Iterator;
  * The address and key come from the laptop over the paired LAN link; they're never built into the app.
  */
 final class Cloud {
+    /** The shared hush. service. Every request after sign-in carries the account's own session token. */
+    static final String DEFAULT_URL = "https://hush-sync.draw-track-racer.workers.dev";
+
+    static String username(Context c) {
+        return Link.prefs(c).getString("username", "");
+    }
+
+    /** Sign in with a hush. account. Returns null on success, or a message to show. */
+    static String login(Context c, String user, String pass) {
+        try {
+            URL u = new URL(DEFAULT_URL + "/auth/login");
+            HttpURLConnection h = (HttpURLConnection) u.openConnection();
+            h.setConnectTimeout(8000);
+            h.setReadTimeout(10000);
+            h.setRequestMethod("POST");
+            h.setRequestProperty("Content-Type", "application/json");
+            h.setRequestProperty("User-Agent", "hush-phone/1.4");
+            byte[] b = new JSONObject().put("username", user).put("password", pass).put("device", "phone").toString().getBytes("UTF-8");
+            h.setDoOutput(true);
+            h.setFixedLengthStreamingMode(b.length);
+            OutputStream os = h.getOutputStream();
+            os.write(b);
+            os.close();
+            int code = h.getResponseCode();
+            InputStream in = code < 400 ? h.getInputStream() : h.getErrorStream();
+            ByteArrayOutputStream bo = new ByteArrayOutputStream();
+            if (in != null) {
+                byte[] buf = new byte[4096];
+                int n;
+                while ((n = in.read(buf)) > 0) bo.write(buf, 0, n);
+                in.close();
+            }
+            JSONObject r = new JSONObject(bo.size() > 0 ? bo.toString("UTF-8") : "{}");
+            if (code != 200) return r.optString("error", "Couldn't sign in (" + code + ")");
+            Link.prefs(c).edit().putString("cloudUrl", DEFAULT_URL).putString("cloudKey", r.getString("token"))
+                    .putString("username", r.getJSONObject("user").optString("username"))
+                    .putLong("laptopSince", 0).apply();
+            return null;
+        } catch (Exception e) {
+            return "Can't reach the hush. server. Check your internet.";
+        }
+    }
+
+    static void logout(Context c) {
+        try {
+            if (!username(c).isEmpty()) req(c, "POST", "/auth/logout", new JSONObject());
+        } catch (Exception ignored) {
+        }
+        Link.prefs(c).edit().remove("cloudUrl").remove("cloudKey").remove("username").apply();
+    }
+
+    /** Friends leaderboard for today / this week, in this phone's timezone. */
+    static JSONObject leaderboard(Context c, boolean week) throws Exception {
+        java.util.Calendar start = Usage.startOfDay(week ? 6 : 0);
+        int tz = java.util.TimeZone.getDefault().getOffset(System.currentTimeMillis()) / 60000;
+        return req(c, "GET", "/leaderboard?from=" + start.getTimeInMillis() + "&tz=" + tz, null);
+    }
+
     static boolean configured(Context c) {
         SharedPreferences p = Link.prefs(c);
         return !p.getString("cloudUrl", "").isEmpty() && !p.getString("cloudKey", "").isEmpty();
@@ -119,7 +177,7 @@ final class Cloud {
     /** Everything the background service does every ~15 minutes. Never throws. */
     static void syncQuietly(Context c) {
         try {
-            if (!configured(c)) fetchConfig(c);
+            if (!configured(c) && username(c).isEmpty()) fetchConfig(c);
             pushDays(c);
             pullLaptop(c);
             Link.prefs(c).edit().putLong("lastSync", System.currentTimeMillis()).apply();

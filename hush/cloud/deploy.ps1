@@ -18,11 +18,17 @@ try {
     }
 
     # 1. database (reuse if it already exists)
-    $list = (W @('d1', 'list', '--json')) -join "`n"
-    $db = (ConvertFrom-Json $list) | Where-Object { $_.name -eq 'hush-sync' } | Select-Object -First 1
+    function Dbs {
+        # npm can print warnings around the JSON; keep only the [ ... ] part
+        $t = (W @('d1', 'list', '--json')) -join "`n"
+        $a = $t.IndexOf('['); $z = $t.LastIndexOf(']')
+        if ($a -lt 0 -or $z -lt $a) { return @() }
+        return ConvertFrom-Json $t.Substring($a, $z - $a + 1)
+    }
+    $db = Dbs | Where-Object { $_.name -eq 'hush-sync' } | Select-Object -First 1
     if (-not $db) {
         W @('d1', 'create', 'hush-sync') | Out-Null
-        $db = (ConvertFrom-Json ((W @('d1', 'list', '--json')) -join "`n")) | Where-Object { $_.name -eq 'hush-sync' } | Select-Object -First 1
+        $db = Dbs | Where-Object { $_.name -eq 'hush-sync' } | Select-Object -First 1
     }
     $dbId = $db.uuid
     if (-not $dbId) { throw 'could not find the hush-sync database id' }

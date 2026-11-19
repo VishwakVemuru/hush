@@ -176,7 +176,7 @@ final class Link {
         p.edit().putLong("lastOk", now).putInt("fails", 0).putInt("status", OK)
                 .putString("laptopId", j.optString("id", p.getString("laptopId", ""))).apply();
         // first time on Wi-Fi with a laptop that has cloud sync: pick up the sync address + key
-        if (j.optBoolean("cloud", false) && !Cloud.configured(c) && now - p.getLong("cfgTry", 0) > 600000) {
+        if (j.optBoolean("cloud", false) && !Cloud.configured(c) && Cloud.username(c).isEmpty() && now - p.getLong("cfgTry", 0) > 600000) {
             p.edit().putLong("cfgTry", now).apply();
             Cloud.fetchConfig(c);
         }

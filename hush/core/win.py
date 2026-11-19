@@ -10,6 +10,7 @@ import subprocess
 import threading
 
 IS_WIN = sys.platform == "win32"
+IS_MAC = sys.platform == "darwin"
 NO_WINDOW = 0x08000000
 
 if IS_WIN:
@@ -92,19 +93,28 @@ def is_admin():
 
 
 def relaunch_as_admin(script):
-    """Restart this script elevated (UAC prompt). Returns True if the prompt was accepted."""
+    """Restart hush elevated (UAC prompt). Returns True if the prompt was accepted."""
     if not IS_WIN:
         return False
-    exe = pythonw()
-    params = f'"{script}"'
-    rc = shell32.ShellExecuteW(None, "runas", exe, params, os.path.dirname(script), 1)
+    exe, params, wd = launch_cmd(script)
+    rc = shell32.ShellExecuteW(None, "runas", exe, params, wd, 1)
     return rc > 32
+
+
+FROZEN = getattr(sys, "frozen", False)  # running as the installed hush.exe (PyInstaller)
 
 
 def pythonw():
     exe = sys.executable
     cand = os.path.join(os.path.dirname(exe), "pythonw.exe")
     return cand if os.path.exists(cand) else exe
+
+
+def launch_cmd(script):
+    """(program, arguments, working dir) that starts hush: hush.exe when installed, pythonw app.py from source."""
+    if FROZEN:
+        return sys.executable, "", os.path.dirname(sys.executable)
+    return pythonw(), f'"{script}"', os.path.dirname(script)
 
 
 # ---------- start with Windows ----------
@@ -116,7 +126,8 @@ def set_startup(enabled, script):
         return False
     with winreg.OpenKey(winreg.HKEY_CURRENT_USER, RUN_KEY, 0, winreg.KEY_SET_VALUE) as k:
         if enabled:
-            winreg.SetValueEx(k, "hush", 0, winreg.REG_SZ, f'"{pythonw()}" "{script}" --tray')
+            exe, params, _ = launch_cmd(script)
+            winreg.SetValueEx(k, "hush", 0, winreg.REG_SZ, f'"{exe}" {params} --tray'.replace("  ", " "))
         else:
             try:
                 winreg.DeleteValue(k, "hush")
@@ -385,7 +396,8 @@ def create_shortcuts(script, ico):
     """Desktop + Start-menu shortcut 'hush' with our icon. Returns True on success."""
     if not IS_WIN:
         return False
-    env = dict(os.environ, HUSH_TARGET=pythonw(), HUSH_ARGS=f'"{script}"', HUSH_WD=os.path.dirname(script), HUSH_ICO=ico)
+    exe, params, wd = launch_cmd(script)
+    env = dict(os.environ, HUSH_TARGET=exe, HUSH_ARGS=params, HUSH_WD=wd, HUSH_ICO=ico)
     try:
         r = subprocess.run(["powershell", "-NoProfile", "-ExecutionPolicy", "Bypass", "-Command", _PS_SHORTCUT],
                            env=env, capture_output=True, creationflags=NO_WINDOW, timeout=30)
@@ -430,3 +442,23 @@ def reveal_file(path):
     if IS_WIN and os.path.isfile(path):
         import subprocess
         subprocess.Popen(["explorer", "/select,", os.path.normpath(path)])
+
+
+def play_sound(path):
+    try:
+        import winsound
+        winsound.PlaySound(path, winsound.SND_FILENAME | winsound.SND_ASYNC | winsound.SND_NODEFAULT)
+    except Exception:
+        pass
+
+
+def data_dir():
+    """Where hush keeps its database, log and settings."""
+    if IS_MAC:
+        return os.path.join(os.path.expanduser("~/Library/Application Support"), "hush")
+    return os.path.join(os.environ.get("LOCALAPPDATA") or os.path.expanduser("~"), "hush")
+
+
+# On a Mac, replace the Windows helpers above with the macOS ones (same names, same behaviour).
+if IS_MAC:
+    from .mac import *  # noqa: F401,F403,E402

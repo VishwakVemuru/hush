@@ -9,7 +9,7 @@ from . import win
 from .names import BROWSERS, pretty, site_key
 
 log = logging.getLogger("hush.tracker")
-SKIP = {"lockapp.exe", "logonui.exe", "screensaver.exe"}
+SKIP = {"lockapp.exe", "logonui.exe", "screensaver.exe", "loginwindow", "screensaverengine"}
 
 
 class Tracker(threading.Thread):
@@ -95,7 +95,8 @@ class Tracker(threading.Thread):
             t0 = time.time()
             try:
                 self.engine.tick()
-                if win.IS_WIN:
+                self.engine.tick_second()
+                if win.IS_WIN or win.IS_MAC:
                     self.step()
             except Exception:
                 log.exception("tracker step failed")

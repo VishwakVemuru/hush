@@ -1,0 +1,185 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>hush. — a calm focus timer that blocks distractions and studies with your friends</title>
+<meta name="description" content="hush. is a free focus timer for Windows and Mac. A tide drains as you focus, distracting apps and sites stay closed, your phone follows along, and friends compete on camera-verified study time.">
+<meta property="og:title" content="hush. — a calm focus timer">
+<meta property="og:description" content="A tide that drains as you focus. Blocks games, feeds and your phone's worst apps, and keeps an honest leaderboard with your friends.">
+<meta property="og:image" content="https://hush-focus.vercel.app/img/og.png">
+<meta property="og:type" content="website">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="theme-color" content="#F3EFE7">
+<link rel="icon" href="img/favicon.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Schibsted+Grotesk:wght@400;500;600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<a class="skip" href="#main">Skip to content</a>
+
+<header class="top">
+  <a class="brand" href="#" aria-label="hush. home"><img src="img/favicon.png" alt="" width="30" height="30"><span>hush.</span></a>
+  <nav aria-label="Main">
+    <a href="#demo">Try it</a>
+    <a href="#phone">Phone</a>
+    <a href="#friends">Friends</a>
+    <a href="#download" class="nav-cta">Download</a>
+  </nav>
+</header>
+
+<main id="main">
+  <!-- surface -->
+  <section class="hero" aria-labelledby="h1">
+    <div class="hero-copy">
+      <h1 id="h1">A focus timer that drains like the tide.</h1>
+      <p class="lede">Start a session and the water slowly falls. While it does, games and feeds stay shut on your laptop and your phone, and the time you spend actually studying gets counted, honestly.</p>
+      <div class="dl-row">
+        <a class="btn primary" href="https://github.com/VishwakVemuru/hush/releases/latest/download/hush-setup.exe" data-dl="win">
+          <svg aria-hidden="true" viewBox="0 0 24 24"><path d="M3 5.5l7.5-1v7H3zM11.5 4.4L21 3v8.5h-9.5zM3 12.5h7.5v7L3 18.5zM11.5 12.5H21V21l-9.5-1.4z"/></svg>
+          Download for Windows</a>
+        <a class="btn" href="#download">Mac and Android</a>
+      </div>
+      <p class="fine">Free and open source. Windows 10 and 11, macOS 12+ (beta), Android 8+.</p>
+    </div>
+    <figure class="hero-tide">
+      <canvas id="tide" aria-label="An animated tide timer counting down from 25 minutes. Tap the water to make ripples."></canvas>
+      <figcaption>Tap the water.</figcaption>
+    </figure>
+  </section>
+
+  <div class="waterline" aria-hidden="true"><svg viewBox="0 0 1440 120" preserveAspectRatio="none"><path class="w1" d="M0 60 C 240 20 480 100 720 60 S 1200 20 1440 60 V120 H0Z"/><path class="w2" d="M0 78 C 260 40 520 112 780 74 S 1240 44 1440 80 V120 H0Z"/></svg></div>
+
+  <!-- deep water -->
+  <div class="deep">
+    <section id="demo" class="demo" aria-labelledby="demo-h">
+      <div class="demo-head">
+        <h2 id="demo-h">This is hush. itself, running in your browser.</h2>
+        <p>Same code as the desktop app, filled with sample data. Start a session, open your stats, press <kbd>F</kbd> for the full-screen timer.</p>
+      </div>
+      <div class="demo-tabs" role="tablist" aria-label="Demo screens">
+        <button role="tab" aria-selected="true" data-view="focus">Focus</button>
+        <button role="tab" aria-selected="false" data-view="stats">Screen time</button>
+        <button role="tab" aria-selected="false" data-view="friends">Friends</button>
+        <button role="tab" aria-selected="false" data-view="block">Blocklist</button>
+      </div>
+      <div class="device">
+        <div class="device-bar" aria-hidden="true"><i></i><i></i><i></i></div>
+        <iframe id="app" src="app/index.html?mock" title="Interactive demo of the hush. app" loading="lazy"></iframe>
+      </div>
+      <p class="demo-small">On a phone screen? The demo is built for a laptop, so it's easiest to try there.</p>
+    </section>
+
+    <section class="row" aria-labelledby="block-h">
+      <div class="row-copy">
+        <h2 id="block-h">Two ways to stay put.</h2>
+        <p>Pick how strict a session is before you start. Either way, blocked apps get ten seconds to let you save, then close the moment they open.</p>
+      </div>
+      <table class="modes">
+        <caption class="sr">Soft mode compared with Hard mode</caption>
+        <thead><tr><th scope="col"></th><th scope="col">Soft</th><th scope="col">Hard</th></tr></thead>
+        <tbody>
+          <tr><th scope="row">Pause</th><td>Allowed</td><td>No</td></tr>
+          <tr><th scope="row">Stop early</th><td>Type a sentence or wait 60 seconds</td><td>Not until every session ends</td></tr>
+          <tr><th scope="row">Quit the app</th><td>From the tray</td><td>Disabled, and it reopens mid-session if killed</td></tr>
+          <tr><th scope="row">Blocked</th><td colspan="2">Steam, Epic, Riot and Xbox games, launchers, any app you add, and sites like Instagram, Reddit and YouTube Shorts</td></tr>
+        </tbody>
+      </table>
+    </section>
+
+    <section id="phone" class="row flip" aria-labelledby="phone-h">
+      <div class="row-copy">
+        <h2 id="phone-h">Your phone follows your laptop.</h2>
+        <p>Start focus on your laptop and the hush. Android app sends Instagram, Reddit and anything else you pick straight back to the home screen. WhatsApp, Telegram and Discord always stay open, because people still need to reach you.</p>
+        <p class="muted">Works on home Wi-Fi, and through the cloud when you're out. Turning Wi-Fi off doesn't end the session early.</p>
+      </div>
+      <div class="phone" role="img" aria-label="The hush. phone app showing 'Instagram can wait. 23 minutes of focus left', with WhatsApp, Telegram and Discord marked as always allowed.">
+        <div class="phone-screen">
+          <span class="ph-logo">hush.</span>
+          <span class="ph-big">Instagram can wait.</span>
+          <span class="ph-left">23 min of focus left</span>
+          <ul class="ph-allow">
+            <li><b>WhatsApp</b><span>always open</span></li>
+            <li><b>Telegram</b><span>always open</span></li>
+            <li><b>Discord</b><span>always open</span></li>
+          </ul>
+        </div>
+      </div>
+    </section>
+
+    <section id="friends" class="row" aria-labelledby="friends-h">
+      <div class="row-copy">
+        <h2 id="friends-h">Study with friends, and prove you were there.</h2>
+        <p>Make an account, add friends by username, and see who focused most this week. Anyone can leave a timer running and walk off, so hush. counts <span class="verified">verified</span> minutes separately: during focus your webcam checks you're at your desk and not holding your phone.</p>
+        <p class="muted">The check runs entirely on your laptop with Google's open MediaPipe models. No video or pictures are saved or sent anywhere. Friends only see your focus minutes and streak, never what apps you used. The camera is off unless you turn it on.</p>
+      </div>
+      <ol class="board" aria-label="Example friends leaderboard for the week">
+        <li><span class="rk">1</span><span class="av">M</span><span class="who"><b>Maya</b><small>9 day streak</small></span><span class="bar"><i style="--f:92%;--v:84%"></i></span><span class="n"><b>10h 30m</b><small>11h 23m focus</small></span></li>
+        <li class="me"><span class="rk">2</span><span class="av">A</span><span class="who"><b>You</b><small>12 day streak</small></span><span class="bar"><i style="--f:81%;--v:67%"></i></span><span class="n"><b>8h 22m</b><small>10h 8m focus</small></span></li>
+        <li><span class="rk">3</span><span class="av">D</span><span class="who"><b>Dev</b><small>3 day streak</small></span><span class="bar"><i style="--f:87%;--v:27%"></i></span><span class="n"><b>3h 20m</b><small>10h 50m focus</small></span></li>
+      </ol>
+    </section>
+
+    <section class="row flip" aria-labelledby="time-h">
+      <div class="row-copy">
+        <h2 id="time-h">See where both screens went.</h2>
+        <p>hush. logs the app in front every second, skips time you're away, and adds your phone's screen time from Android. Look at your laptop, your phone, or both together, then save a card to share.</p>
+        <p class="muted">Browsers count as the browser. hush. never records which websites you visit.</p>
+      </div>
+      <div class="split" role="img" aria-label="Example day: 7 hours 33 minutes of screen time, 5 hours 51 minutes on the laptop and 1 hour 42 minutes on the phone.">
+        <span class="split-total">7h 33m</span>
+        <span class="split-sub">today, laptop and phone</span>
+        <span class="split-bar"><i class="l" style="flex:351"></i><i class="p" style="flex:102"></i></span>
+        <span class="split-key"><span><i class="l"></i>Laptop 5h 51m</span><span><i class="p"></i>Phone 1h 42m</span></span>
+      </div>
+    </section>
+  </div>
+
+  <div class="waterline up" aria-hidden="true"><svg viewBox="0 0 1440 120" preserveAspectRatio="none"><path class="w1" d="M0 60 C 240 20 480 100 720 60 S 1200 20 1440 60 V0 H0Z"/></svg></div>
+
+  <!-- surface again -->
+  <section class="honest" aria-labelledby="honest-h">
+    <h2 id="honest-h">What hush. can't do.</h2>
+    <p>You own your computer and your phone, so a determined person can always get around a blocker: Task Manager, safe mode, uninstalling. hush. is built to stop the impulse to drift, not to be a prison.</p>
+    <p>The camera check stops "timer on, walk away". A photo held up to the webcam, or a phone hidden under the desk, can still fool it, and a friend who edits their copy of the app could fake their numbers. Keep the leaderboard to people you trust.</p>
+  </section>
+
+  <section id="download" class="download" aria-labelledby="dl-h">
+    <h2 id="dl-h">Download hush.</h2>
+    <ul class="dl-list">
+      <li>
+        <span class="dl-name">Windows</span>
+        <span class="dl-note">Windows 10 or 11. Windows may say the app is unrecognised: choose <em>More info</em>, then <em>Run anyway</em>.</span>
+        <a class="btn primary" href="https://github.com/VishwakVemuru/hush/releases/latest/download/hush-setup.exe" data-dl="win">Download installer</a>
+      </li>
+      <li>
+        <span class="dl-name">Mac <small>beta</small></span>
+        <span class="dl-note">macOS 12 or later on Apple silicon. The first time, right-click hush. in Applications and choose <em>Open</em>.</span>
+        <a class="btn" href="https://github.com/VishwakVemuru/hush/releases/latest/download/hush-mac.dmg" data-dl="mac">Download for Mac</a>
+      </li>
+      <li>
+        <span class="dl-name">Android</span>
+        <span class="dl-note">Android 8 or later. Install it from your laptop over USB (newer Android blocks installs from the browser for apps like this); the setup guide shows how.</span>
+        <a class="btn" href="https://github.com/VishwakVemuru/hush/blob/main/hush/README.md#optional-phone-app-android">Setup guide</a>
+      </li>
+    </ul>
+    <p class="fine">Prefer to read the code first? It's all on <a href="https://github.com/VishwakVemuru/hush">GitHub</a> under the MIT licence.</p>
+  </section>
+</main>
+
+<footer class="foot">
+  <span class="brand small"><img src="img/favicon.png" alt="" width="22" height="22"><span>hush.</span></span>
+  <nav aria-label="Footer">
+    <a href="privacy.html">Privacy</a>
+    <a href="terms.html">Terms</a>
+    <a href="https://github.com/VishwakVemuru/hush">GitHub</a>
+    <a href="https://github.com/VishwakVemuru/hush/issues">Report a problem</a>
+  </nav>
+</footer>
+
+<script src="tide.js"></script>
+<script src="main.js"></script>
+</body>
+</html>

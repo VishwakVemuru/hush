@@ -25,6 +25,11 @@ class DB:
         with self.lock:
             self.c.execute("PRAGMA journal_mode=WAL")
             self.c.executescript(SCHEMA)
+            # v1.4: camera study check columns
+            have = {r[1] for r in self.c.execute("PRAGMA table_info(focus)").fetchall()}
+            for col in ("verified", "phone_s", "away_s"):
+                if col not in have:
+                    self.c.execute(f"ALTER TABLE focus ADD COLUMN {col} REAL DEFAULT 0")
 
     def q(self, sql, args=()):
         with self.lock:
@@ -60,9 +65,9 @@ class DB:
         return self.x("INSERT INTO focus(label,mode,start,end,planned) VALUES(?,?,?,?,?)",
                       (label, mode, time.time(), time.time(), planned))
 
-    def focus_end(self, fid, tracked, distracted, blocked, completed):
-        self.x("UPDATE focus SET end=?, tracked=?, distracted=?, blocked=?, completed=? WHERE id=?",
-               (time.time(), tracked, distracted, blocked, int(completed), fid))
+    def focus_end(self, fid, tracked, distracted, blocked, completed, verified=0, phone_s=0, away_s=0):
+        self.x("UPDATE focus SET end=?, tracked=?, distracted=?, blocked=?, completed=?, verified=?, phone_s=?, away_s=? WHERE id=?",
+               (time.time(), tracked, distracted, blocked, int(completed), verified, phone_s, away_s, fid))
 
     def focus_between(self, a, b):
         return self.q("SELECT * FROM focus WHERE start>=? AND start<? ORDER BY start", (a, b))

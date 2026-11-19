@@ -76,8 +76,8 @@ class Blocker(threading.Thread):
         exe = os.path.basename((exe or "").strip().strip('"')).lower()
         if not exe:
             return False
-        if not exe.endswith(".exe"):
-            exe += ".exe"
+        if win.IS_WIN and not exe.endswith(".exe"):
+            exe += ".exe"  # macOS process names have no extension
         if exe in PROTECTED:
             return False
         with self.lock:

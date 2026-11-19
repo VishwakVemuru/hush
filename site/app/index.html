@@ -1,0 +1,209 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>hush.</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<div class="app">
+  <aside class="side">
+    <div class="brand">
+      <svg class="brand-mark" viewBox="0 0 44 44" aria-hidden="true"><rect x="2" y="2" width="40" height="40" rx="12" fill="#3E6A9E"/><path id="bw1" d="M11 18 Q 16.5 13 22 18 T 33 18" fill="none" stroke="#8FA6C4" stroke-width="2.4" stroke-linecap="round"/><path id="bw2" d="M11 26 Q 16.5 21 22 26 T 33 26" fill="none" stroke="#F3EFE7" stroke-width="2.8" stroke-linecap="round"/></svg>
+      <span class="brand-word">hush.</span>
+    </div>
+    <nav class="nav" id="nav">
+      <div class="nav-pill" id="navPill"></div>
+      <button class="nav-item on" data-view="focus"><svg class="i"><use href="#i-target"/></svg>Focus</button>
+      <button class="nav-item" data-view="stats"><svg class="i"><use href="#i-chart"/></svg>Stats</button>
+      <button class="nav-item" data-view="friends"><svg class="i"><use href="#i-users"/></svg>Friends</button>
+      <button class="nav-item" data-view="block"><svg class="i"><use href="#i-shield"/></svg>Blocklist</button>
+      <button class="nav-item" data-view="settings"><svg class="i"><use href="#i-settings"/></svg>Settings</button>
+    </nav>
+    <div class="side-foot">
+      <div class="using" id="using"></div>
+      <div class="streak">
+        <div class="k"><svg class="i"><use href="#i-flame"/></svg>Focus streak</div>
+        <div class="v" id="streakV">0 days</div>
+        <div class="dots" id="streakDots"></div>
+      </div>
+    </div>
+  </aside>
+
+  <main class="main">
+    <!-- FOCUS -->
+    <section class="view on" id="v-focus">
+      <div class="head">
+        <div><h1 class="h1" id="greet">Good evening</h1><div class="sub" id="dateLine"></div></div>
+        <div class="seg" id="modeSeg"><div class="seg-pill"></div>
+          <button data-mode="soft" class="on">Soft</button>
+          <button data-mode="hard"><svg class="i"><use href="#i-lock"/></svg>Hard</button>
+        </div>
+      </div>
+      <div class="focus-grid">
+        <div class="card timer-card">
+          <button class="btn icon ghost expand-btn" id="zenBtn" title="Full screen (F)"><svg class="i"><use href="#i-maximize"/></svg></button>
+          <input class="label-input" id="labelInput" type="text" maxlength="80" placeholder="What are you focusing on?">
+          <div class="tide-wrap" id="tideWrap"><canvas id="tide"></canvas></div>
+          <div class="cam-badge" id="camBadge" hidden></div>
+          <div class="sess-dots" id="sessDots"></div>
+          <div class="setup" id="setup">
+            <div class="chips" id="presets"></div>
+            <div class="setup-row">Sessions <div class="stepper"><button id="sMinus">−</button><span id="sCount">4</span><button id="sPlus">+</button></div></div>
+          </div>
+          <div class="controls">
+            <button class="btn icon gone" id="bStop" title="Stop"><svg class="i"><use href="#i-stop"/></svg></button>
+            <button class="btn primary" id="bMain"><svg class="i"><use href="#i-play"/></svg><span>Start focus</span></button>
+            <button class="btn icon gone" id="bSkip" title="Skip"><svg class="i"><use href="#i-skip"/></svg></button>
+          </div>
+          <div class="lock-note" id="lockNote"></div>
+        </div>
+        <div class="side-col">
+          <div class="card">
+            <p class="label"><span>Daily goal</span><span id="goalTxt">0m / 4h</span></p>
+            <div class="goal-bar"><div id="goalBar" style="transform:scaleX(0)"></div></div>
+          </div>
+          <div class="card">
+            <p class="label"><span>Up next</span><button class="btn ghost sm" id="clearDone" style="height:24px;padding:0 8px">Clear done</button></p>
+            <div class="tasks" id="tasks"></div>
+            <input class="add-task" id="taskInput" type="text" placeholder="Add a task, press Enter">
+          </div>
+          <div class="card">
+            <p class="label"><span>Ambient</span></p>
+            <div class="chips" id="ambient" style="margin-top:10px">
+              <button class="chip" data-snd="rain"><svg class="i"><use href="#i-rain"/></svg>Rain</button>
+              <button class="chip" data-snd="waves"><svg class="i"><use href="#i-waves"/></svg>Waves</button>
+              <button class="chip" data-snd="brown"><svg class="i"><use href="#i-noise"/></svg>Brown noise</button>
+            </div>
+            <div class="vol"><svg class="i"><use href="#i-volume"/></svg><input type="range" id="vol" min="0" max="1" step="0.01" value="0.5"></div>
+          </div>
+          <div class="card blocked-card" id="blockedCard"><svg class="i"><use href="#i-shield"/></svg><span id="blockedTxt">Blocking turns on when focus starts</span></div>
+        </div>
+      </div>
+    </section>
+
+    <!-- STATS -->
+    <section class="view" id="v-stats">
+      <div class="head stats-head">
+        <div><h1 class="h1" id="statsTitle">Today</h1><div class="sub" id="statsSub">Where your time went</div></div>
+        <div class="stats-ctl">
+          <div class="seg" id="srcSeg"><div class="seg-pill"></div>
+            <button data-s="laptop" class="on"><svg class="i"><use href="#i-desktop"/></svg>Laptop</button><button data-s="phone"><svg class="i"><use href="#i-phone"/></svg>Phone</button><button data-s="all"><svg class="i"><use href="#i-devices"/></svg>Combined</button>
+          </div>
+          <div class="seg" id="rangeSeg"><div class="seg-pill"></div>
+            <button data-r="day" class="on">Day</button><button data-r="week">Week</button><button data-r="month">Month</button>
+          </div>
+          <button class="btn sm" id="shareBtn" title="Save or copy a picture of these stats"><svg class="i"><use href="#i-share"/></svg>Share</button>
+        </div>
+      </div>
+      <div class="stats-top" id="cards"></div>
+      <div class="stats-grid">
+        <div class="card chart-card"><p class="label"><span id="chartTitle">By hour</span><span class="legend" id="legend"></span></p>
+          <div class="chart"><div class="grid" id="grid"></div><div class="bars" id="bars"></div></div><div class="axis" id="axis"></div></div>
+        <div class="card"><p class="label"><span>Categories</span><span id="catTotal"></span></p>
+          <div class="cat-stack" id="catStack"></div>
+          <div class="cat-rows" id="catList"></div>
+        </div>
+      </div>
+      <div class="card"><p class="label"><span id="appsTitle">Top apps</span><span>click a category to change it</span></p><div id="apps" style="margin-top:6px"></div></div>
+      <div class="sync-note" id="syncNote"></div>
+    </section>
+
+    <!-- FRIENDS -->
+    <section class="view" id="v-friends">
+      <div class="head">
+        <div><h1 class="h1">Friends</h1><div class="sub" id="friendsSub">Focus together</div></div>
+        <div class="seg" id="lbSeg"><div class="seg-pill"></div>
+          <button data-r="day">Today</button><button data-r="week" class="on">Week</button><button data-r="month">Month</button>
+        </div>
+      </div>
+      <div id="friendsBody"></div>
+    </section>
+
+    <!-- BLOCKLIST -->
+    <section class="view" id="v-block">
+      <div class="head"><div><h1 class="h1">Blocklist</h1><div class="sub">What stays closed while you focus</div></div></div>
+      <div class="tabs" id="blockTabs"><button data-t="apps" class="on">Apps</button><button data-t="sites">Websites</button><div class="tab-line"></div></div>
+      <div class="block-grid">
+        <div class="card" id="blockMain"></div>
+        <div style="display:flex;flex-direction:column;gap:12px" id="blockSide"></div>
+      </div>
+    </section>
+
+    <!-- SETTINGS -->
+    <section class="view" id="v-settings">
+      <div class="head"><div><h1 class="h1">Settings</h1><div class="sub">Make hush. yours</div></div></div>
+      <div class="set-grid" id="settingsGrid"></div>
+    </section>
+  </main>
+</div>
+<div class="zen" id="zen" aria-hidden="true">
+  <div class="zen-top">
+    <span class="zen-brand">hush.</span>
+    <button class="btn icon ghost" id="zenExit" title="Exit full screen (Esc)"><svg class="i"><use href="#i-minimize"/></svg></button>
+  </div>
+  <div class="zen-tide" id="zenTide"></div>
+  <div class="zen-dots" id="zenDots"></div>
+  <div class="zen-ctrl"><button class="btn primary" id="zenMain"></button></div>
+</div>
+<div class="toasts" id="toasts"></div>
+
+<svg width="0" height="0" style="position:absolute" aria-hidden="true">
+  <symbol id="i-target" viewBox="0 0 24 24"><path d="M11 12a1 1 0 1 0 2 0a1 1 0 1 0 -2 0" /> <path d="M12 7a5 5 0 1 0 5 5" /> <path d="M13 3.055a9 9 0 1 0 7.941 7.945" /> <path d="M15 6v3h3l3 -3h-3v-3l-3 3" /> <path d="M15 9l-3 3" /></symbol>
+  <symbol id="i-chart" viewBox="0 0 24 24"><path d="M3 3v18h18" /> <path d="M20 18v3" /> <path d="M16 16v5" /> <path d="M12 13v8" /> <path d="M8 16v5" /> <path d="M3 11c6 0 5 -5 9 -5s3 5 9 5" /></symbol>
+  <symbol id="i-shield" viewBox="0 0 24 24"><path d="M11.46 20.846a12 12 0 0 1 -7.96 -14.846a12 12 0 0 0 8.5 -3a12 12 0 0 0 8.5 3a12 12 0 0 1 -.09 7.06" /> <path d="M15 19l2 2l4 -4" /></symbol>
+  <symbol id="i-settings" viewBox="0 0 24 24"><path d="M12 6a2 2 0 1 0 4 0a2 2 0 1 0 -4 0" /> <path d="M4 6l8 0" /> <path d="M16 6l4 0" /> <path d="M6 12a2 2 0 1 0 4 0a2 2 0 1 0 -4 0" /> <path d="M4 12l2 0" /> <path d="M10 12l10 0" /> <path d="M15 18a2 2 0 1 0 4 0a2 2 0 1 0 -4 0" /> <path d="M4 18l11 0" /> <path d="M19 18l1 0" /></symbol>
+  <symbol id="i-flame" viewBox="0 0 24 24"><path d="M12 10.941c2.333 -3.308 .167 -7.823 -1 -8.941c0 3.395 -2.235 5.299 -3.667 6.706c-1.43 1.408 -2.333 3.294 -2.333 5.588c0 3.704 3.134 6.706 7 6.706c3.866 0 7 -3.002 7 -6.706c0 -1.712 -1.232 -4.403 -2.333 -5.588c-2.084 3.353 -3.257 3.353 -4.667 2.235" /></symbol>
+  <symbol id="i-lock" viewBox="0 0 24 24"><path d="M5 13a2 2 0 0 1 2 -2h10a2 2 0 0 1 2 2v6a2 2 0 0 1 -2 2h-10a2 2 0 0 1 -2 -2v-6" /> <path d="M11 16a1 1 0 1 0 2 0a1 1 0 0 0 -2 0" /> <path d="M8 11v-4a4 4 0 1 1 8 0v4" /></symbol>
+  <symbol id="i-play" viewBox="0 0 24 24"><path d="M7 4v16l13 -8l-13 -8" /></symbol>
+  <symbol id="i-pause" viewBox="0 0 24 24"><path d="M6 6a1 1 0 0 1 1 -1h2a1 1 0 0 1 1 1v12a1 1 0 0 1 -1 1h-2a1 1 0 0 1 -1 -1l0 -12" /> <path d="M14 6a1 1 0 0 1 1 -1h2a1 1 0 0 1 1 1v12a1 1 0 0 1 -1 1h-2a1 1 0 0 1 -1 -1l0 -12" /></symbol>
+  <symbol id="i-skip" viewBox="0 0 24 24"><path d="M4 5v14l12 -7l-12 -7" /> <path d="M20 5l0 14" /></symbol>
+  <symbol id="i-stop" viewBox="0 0 24 24"><path d="M5 7a2 2 0 0 1 2 -2h10a2 2 0 0 1 2 2v10a2 2 0 0 1 -2 2h-10a2 2 0 0 1 -2 -2l0 -10" /></symbol>
+  <symbol id="i-rain" viewBox="0 0 24 24"><path d="M7 18a4.6 4.4 0 0 1 0 -9a5 4.5 0 0 1 11 2h1a3.5 3.5 0 0 1 0 7" /> <path d="M11 13v2m0 3v2m4 -5v2m0 3v2" /></symbol>
+  <symbol id="i-waves" viewBox="0 0 24 24"><path d="M3 7c3 -2 6 -2 9 0s6 2 9 0" /> <path d="M3 17c3 -2 6 -2 9 0s6 2 9 0" /> <path d="M3 12c3 -2 6 -2 9 0s6 2 9 0" /></symbol>
+  <symbol id="i-noise" viewBox="0 0 24 24"><path d="M21 12h-2c-.894 0 -1.662 -.857 -1.761 -2c-.296 -3.45 -.749 -6 -2.749 -6s-2.5 3.582 -2.5 8s-.5 8 -2.5 8s-2.452 -2.547 -2.749 -6c-.1 -1.147 -.867 -2 -1.763 -2h-2" /></symbol>
+  <symbol id="i-volume" viewBox="0 0 24 24"><path d="M15 8a5 5 0 0 1 0 8" /> <path d="M17.7 5a9 9 0 0 1 0 14" /> <path d="M6 15h-2a1 1 0 0 1 -1 -1v-4a1 1 0 0 1 1 -1h2l3.5 -4.5a.8 .8 0 0 1 1.5 .5v14a.8 .8 0 0 1 -1.5 .5l-3.5 -4.5" /></symbol>
+  <symbol id="i-check" viewBox="0 0 24 24"><path d="M5 12l5 5l10 -10" /></symbol>
+  <symbol id="i-x" viewBox="0 0 24 24"><path d="M18 6l-12 12" /> <path d="M6 6l12 12" /></symbol>
+  <symbol id="i-plus" viewBox="0 0 24 24"><path d="M12 5l0 14" /> <path d="M5 12l14 0" /></symbol>
+  <symbol id="i-game" viewBox="0 0 24 24"><path d="M12 5h3.5a5 5 0 0 1 0 10h-5.5l-4.015 4.227a2.3 2.3 0 0 1 -3.923 -2.035l1.634 -8.173a5 5 0 0 1 4.904 -4.019h3.4" /> <path d="M14 15l4.07 4.284a2.3 2.3 0 0 0 3.925 -2.023l-1.6 -8.232" /> <path d="M8 9v2" /> <path d="M7 10h2" /> <path d="M14 10h2" /></symbol>
+  <symbol id="i-globe" viewBox="0 0 24 24"><path d="M3 12a9 9 0 1 0 18 0a9 9 0 0 0 -18 0" /> <path d="M3.6 9h16.8" /> <path d="M3.6 15h16.8" /> <path d="M11.5 3a17 17 0 0 0 0 18" /> <path d="M12.5 3a17 17 0 0 1 0 18" /></symbol>
+  <symbol id="i-puzzle" viewBox="0 0 24 24"><path d="M4 7h3a1 1 0 0 0 1 -1v-1a2 2 0 0 1 4 0v1a1 1 0 0 0 1 1h3a1 1 0 0 1 1 1v3a1 1 0 0 0 1 1h1a2 2 0 0 1 0 4h-1a1 1 0 0 0 -1 1v3a1 1 0 0 1 -1 1h-3a1 1 0 0 1 -1 -1v-1a2 2 0 0 0 -4 0v1a1 1 0 0 1 -1 1h-3a1 1 0 0 1 -1 -1v-3a1 1 0 0 1 1 -1h1a2 2 0 0 0 0 -4h-1a1 1 0 0 1 -1 -1v-3a1 1 0 0 1 1 -1" /></symbol>
+  <symbol id="i-refresh" viewBox="0 0 24 24"><path d="M20 11a8.1 8.1 0 0 0 -15.5 -2m-.5 -4v4h4" /> <path d="M4 13a8.1 8.1 0 0 0 15.5 2m.5 4v-4h-4" /></symbol>
+  <symbol id="i-download" viewBox="0 0 24 24"><path d="M4 17v2a2 2 0 0 0 2 2h12a2 2 0 0 0 2 -2v-2" /> <path d="M7 11l5 5l5 -5" /> <path d="M12 4l0 12" /></symbol>
+  <symbol id="i-bell" viewBox="0 0 24 24"><path d="M10 5a2 2 0 1 1 4 0a7 7 0 0 1 4 6v3a4 4 0 0 0 2 3h-16a4 4 0 0 0 2 -3v-3a7 7 0 0 1 4 -6" /> <path d="M9 17v1a3 3 0 0 0 6 0v-1" /></symbol>
+  <symbol id="i-leaf" viewBox="0 0 24 24"><path d="M5 21c.5 -4.5 2.5 -8 7 -10" /> <path d="M9 18c6.218 0 10.5 -3.288 11 -12v-2h-4.014c-9 0 -11.986 4 -12 9c0 1 0 3 2 5h3l.014 0" /></symbol>
+  <symbol id="i-sparkle" viewBox="0 0 24 24"><path d="M16 18a2 2 0 0 1 2 2a2 2 0 0 1 2 -2a2 2 0 0 1 -2 -2a2 2 0 0 1 -2 2m0 -12a2 2 0 0 1 2 2a2 2 0 0 1 2 -2a2 2 0 0 1 -2 -2a2 2 0 0 1 -2 2m-7 12a6 6 0 0 1 6 -6a6 6 0 0 1 -6 -6a6 6 0 0 1 -6 6a6 6 0 0 1 6 6" /></symbol>
+  <symbol id="i-music" viewBox="0 0 24 24"><path d="M3 17a3 3 0 1 0 6 0a3 3 0 0 0 -6 0" /> <path d="M13 17a3 3 0 1 0 6 0a3 3 0 0 0 -6 0" /> <path d="M9 17v-13h10v13" /> <path d="M9 8h10" /></symbol>
+  <symbol id="i-keyboard" viewBox="0 0 24 24"><path d="M2 8a2 2 0 0 1 2 -2h16a2 2 0 0 1 2 2v8a2 2 0 0 1 -2 2h-16a2 2 0 0 1 -2 -2l0 -8" /> <path d="M6 10l0 .01" /> <path d="M10 10l0 .01" /> <path d="M14 10l0 .01" /> <path d="M18 10l0 .01" /> <path d="M6 14l0 .01" /> <path d="M18 14l0 .01" /> <path d="M10 14l4 .01" /></symbol>
+  <symbol id="i-desktop" viewBox="0 0 24 24"><path d="M3 5a1 1 0 0 1 1 -1h16a1 1 0 0 1 1 1v10a1 1 0 0 1 -1 1h-16a1 1 0 0 1 -1 -1v-10" /> <path d="M7 20h10" /> <path d="M9 16v4" /> <path d="M15 16v4" /></symbol>
+  <symbol id="i-info" viewBox="0 0 24 24"><path d="M3 12a9 9 0 1 0 18 0a9 9 0 0 0 -18 0" /> <path d="M12 9h.01" /> <path d="M11 12h1v4h1" /></symbol>
+  <symbol id="i-moon" viewBox="0 0 24 24"><path d="M12 3c.132 0 .263 0 .393 0a7.5 7.5 0 0 0 7.92 12.446a9 9 0 1 1 -8.313 -12.454l0 .008" /></symbol>
+  <symbol id="i-sun" viewBox="0 0 24 24"><path d="M8 12a4 4 0 1 0 8 0a4 4 0 1 0 -8 0" /> <path d="M3 12h1m8 -9v1m8 8h1m-9 8v1m-6.4 -15.4l.7 .7m12.1 -.7l-.7 .7m0 11.4l.7 .7m-12.1 -.7l-.7 .7" /></symbol>
+  <symbol id="i-coffee" viewBox="0 0 24 24"><path d="M3 14c.83 .642 2.077 1.017 3.5 1c1.423 .017 2.67 -.358 3.5 -1c.83 -.642 2.077 -1.017 3.5 -1c1.423 -.017 2.67 .358 3.5 1" /> <path d="M8 3a2.4 2.4 0 0 0 -1 2a2.4 2.4 0 0 0 1 2" /> <path d="M12 3a2.4 2.4 0 0 0 -1 2a2.4 2.4 0 0 0 1 2" /> <path d="M3 10h14v5a6 6 0 0 1 -6 6h-2a6 6 0 0 1 -6 -6v-5" /> <path d="M16.746 16.726a3 3 0 1 0 .252 -5.555" /></symbol>
+  <symbol id="i-trophy" viewBox="0 0 24 24"><path d="M8 21l8 0" /> <path d="M12 17l0 4" /> <path d="M7 4l10 0" /> <path d="M17 4v8a5 5 0 0 1 -10 0v-8" /> <path d="M3 9a2 2 0 1 0 4 0a2 2 0 1 0 -4 0" /> <path d="M17 9a2 2 0 1 0 4 0a2 2 0 1 0 -4 0" /></symbol>
+  <symbol id="i-clock" viewBox="0 0 24 24"><path d="M3 12a9 9 0 1 0 18 0a9 9 0 0 0 -18 0" /> <path d="M12 7v5l3 3" /></symbol>
+  <symbol id="i-external" viewBox="0 0 24 24"><path d="M12 6h-6a2 2 0 0 0 -2 2v10a2 2 0 0 0 2 2h10a2 2 0 0 0 2 -2v-6" /> <path d="M11 13l9 -9" /> <path d="M15 4h5v5" /></symbol>
+  <symbol id="i-maximize" viewBox="0 0 24 24"><path d="M16 4l4 0l0 4" /> <path d="M14 10l6 -6" /> <path d="M8 20l-4 0l0 -4" /> <path d="M4 20l6 -6" /> <path d="M16 20l4 0l0 -4" /> <path d="M14 14l6 6" /> <path d="M8 4l-4 0l0 4" /> <path d="M4 4l6 6" /></symbol>
+  <symbol id="i-minimize" viewBox="0 0 24 24"><path d="M5 9l4 0l0 -4" /> <path d="M3 3l6 6" /> <path d="M5 15l4 0l0 4" /> <path d="M3 21l6 -6" /> <path d="M19 9l-4 0l0 -4" /> <path d="M15 9l6 -6" /> <path d="M19 15l-4 0l0 4" /> <path d="M15 15l6 6" /></symbol>
+  <symbol id="i-share" viewBox="0 0 24 24"><path d="M8 9h-1a2 2 0 0 0 -2 2v8a2 2 0 0 0 2 2h10a2 2 0 0 0 2 -2v-8a2 2 0 0 0 -2 -2h-1" /> <path d="M12 14v-11" /> <path d="M9 6l3 -3l3 3" /></symbol>
+  <symbol id="i-copy" viewBox="0 0 24 24"><path d="M7 9.667a2.667 2.667 0 0 1 2.667 -2.667h8.666a2.667 2.667 0 0 1 2.667 2.667v8.666a2.667 2.667 0 0 1 -2.667 2.667h-8.666a2.667 2.667 0 0 1 -2.667 -2.667l0 -8.666" /> <path d="M4.012 16.737a2.005 2.005 0 0 1 -1.012 -1.737v-10c0 -1.1 .9 -2 2 -2h10c.75 0 1.158 .385 1.5 1" /></symbol>
+  <symbol id="i-phone" viewBox="0 0 24 24"><path d="M6 5a2 2 0 0 1 2 -2h8a2 2 0 0 1 2 2v14a2 2 0 0 1 -2 2h-8a2 2 0 0 1 -2 -2v-14" /> <path d="M11 4h2" /> <path d="M12 17v.01" /></symbol>
+  <symbol id="i-devices" viewBox="0 0 24 24"><path d="M13 9a1 1 0 0 1 1 -1h6a1 1 0 0 1 1 1v10a1 1 0 0 1 -1 1h-6a1 1 0 0 1 -1 -1v-10" /> <path d="M18 8v-3a1 1 0 0 0 -1 -1h-13a1 1 0 0 0 -1 1v12a1 1 0 0 0 1 1h9" /> <path d="M16 9h2" /></symbol>
+  <symbol id="i-cloud" viewBox="0 0 24 24"><path d="M6.657 18c-2.572 0 -4.657 -2.007 -4.657 -4.483c0 -2.475 2.085 -4.482 4.657 -4.482c.393 -1.762 1.794 -3.2 3.675 -3.773c1.88 -.572 3.956 -.193 5.444 1c1.488 1.19 2.162 3.007 1.77 4.769h.99c1.913 0 3.464 1.56 3.464 3.486c0 1.927 -1.551 3.487 -3.465 3.487h-11.878" /></symbol>
+  <symbol id="i-users" viewBox="0 0 24 24"><path d="M5 7a4 4 0 1 0 8 0a4 4 0 1 0 -8 0" /> <path d="M3 21v-2a4 4 0 0 1 4 -4h4a4 4 0 0 1 4 4v2" /> <path d="M16 3.13a4 4 0 0 1 0 7.75" /> <path d="M21 21v-2a4 4 0 0 0 -3 -3.85" /></symbol>
+  <symbol id="i-camera" viewBox="0 0 24 24"><path d="M5 7h1a2 2 0 0 0 2 -2a1 1 0 0 1 1 -1h6a1 1 0 0 1 1 1a2 2 0 0 0 2 2h1a2 2 0 0 1 2 2v9a2 2 0 0 1 -2 2h-14a2 2 0 0 1 -2 -2v-9a2 2 0 0 1 2 -2" /> <path d="M9 13a3 3 0 1 0 6 0a3 3 0 0 0 -6 0" /></symbol>
+  <symbol id="i-user-plus" viewBox="0 0 24 24"><path d="M8 7a4 4 0 1 0 8 0a4 4 0 0 0 -8 0" /> <path d="M16 19h6" /> <path d="M19 16v6" /> <path d="M6 21v-2a4 4 0 0 1 4 -4h4" /></symbol>
+  <symbol id="i-crown" viewBox="0 0 24 24"><path d="M12 6l4 6l5 -4l-2 10h-14l-2 -10l5 4z" /></symbol>
+  <symbol id="i-logout" viewBox="0 0 24 24"><path d="M14 8v-2a2 2 0 0 0 -2 -2h-7a2 2 0 0 0 -2 2v12a2 2 0 0 0 2 2h7a2 2 0 0 0 2 -2v-2" /> <path d="M9 12h12l-3 -3" /> <path d="M18 15l3 -3" /></symbol>
+  <symbol id="i-fire" viewBox="0 0 24 24"><path d="M4 21l16 -4" /> <path d="M20 21l-16 -4" /> <path d="M12 15a4 4 0 0 0 4 -4c0 -3 -2 -3 -2 -8c-4 2 -6 5 -6 8a4 4 0 0 0 4 4" /></symbol>
+</svg>
+
+<script src="tide.js"></script>
+<script src="sound.js"></script>
+<script src="sfx.js"></script>
+<script src="presence.js"></script>
+<script src="app.js"></script>
+</body>
+</html>

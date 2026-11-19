@@ -17,6 +17,7 @@
       <div class="nav-pill" id="navPill"></div>
       <button class="nav-item on" data-view="focus"><svg class="i"><use href="#i-target"/></svg>Focus</button>
       <button class="nav-item" data-view="stats"><svg class="i"><use href="#i-chart"/></svg>Stats</button>
+      <button class="nav-item" data-view="friends"><svg class="i"><use href="#i-users"/></svg>Friends</button>
       <button class="nav-item" data-view="block"><svg class="i"><use href="#i-shield"/></svg>Blocklist</button>
       <button class="nav-item" data-view="settings"><svg class="i"><use href="#i-settings"/></svg>Settings</button>
     </nav>
@@ -45,6 +46,7 @@
           <button class="btn icon ghost expand-btn" id="zenBtn" title="Full screen (F)"><svg class="i"><use href="#i-maximize"/></svg></button>
           <input class="label-input" id="labelInput" type="text" maxlength="80" placeholder="What are you focusing on?">
           <div class="tide-wrap" id="tideWrap"><canvas id="tide"></canvas></div>
+          <div class="cam-badge" id="camBadge" hidden></div>
           <div class="sess-dots" id="sessDots"></div>
           <div class="setup" id="setup">
             <div class="chips" id="presets"></div>
@@ -106,6 +108,17 @@
       </div>
       <div class="card"><p class="label"><span id="appsTitle">Top apps</span><span>click a category to change it</span></p><div id="apps" style="margin-top:6px"></div></div>
       <div class="sync-note" id="syncNote"></div>
+    </section>
+
+    <!-- FRIENDS -->
+    <section class="view" id="v-friends">
+      <div class="head">
+        <div><h1 class="h1">Friends</h1><div class="sub" id="friendsSub">Focus together</div></div>
+        <div class="seg" id="lbSeg"><div class="seg-pill"></div>
+          <button data-r="day">Today</button><button data-r="week" class="on">Week</button><button data-r="month">Month</button>
+        </div>
+      </div>
+      <div id="friendsBody"></div>
     </section>
 
     <!-- BLOCKLIST -->
@@ -179,12 +192,18 @@
   <symbol id="i-phone" viewBox="0 0 24 24"><path d="M6 5a2 2 0 0 1 2 -2h8a2 2 0 0 1 2 2v14a2 2 0 0 1 -2 2h-8a2 2 0 0 1 -2 -2v-14" /> <path d="M11 4h2" /> <path d="M12 17v.01" /></symbol>
   <symbol id="i-devices" viewBox="0 0 24 24"><path d="M13 9a1 1 0 0 1 1 -1h6a1 1 0 0 1 1 1v10a1 1 0 0 1 -1 1h-6a1 1 0 0 1 -1 -1v-10" /> <path d="M18 8v-3a1 1 0 0 0 -1 -1h-13a1 1 0 0 0 -1 1v12a1 1 0 0 0 1 1h9" /> <path d="M16 9h2" /></symbol>
   <symbol id="i-cloud" viewBox="0 0 24 24"><path d="M6.657 18c-2.572 0 -4.657 -2.007 -4.657 -4.483c0 -2.475 2.085 -4.482 4.657 -4.482c.393 -1.762 1.794 -3.2 3.675 -3.773c1.88 -.572 3.956 -.193 5.444 1c1.488 1.19 2.162 3.007 1.77 4.769h.99c1.913 0 3.464 1.56 3.464 3.486c0 1.927 -1.551 3.487 -3.465 3.487h-11.878" /></symbol>
+  <symbol id="i-users" viewBox="0 0 24 24"><path d="M5 7a4 4 0 1 0 8 0a4 4 0 1 0 -8 0" /> <path d="M3 21v-2a4 4 0 0 1 4 -4h4a4 4 0 0 1 4 4v2" /> <path d="M16 3.13a4 4 0 0 1 0 7.75" /> <path d="M21 21v-2a4 4 0 0 0 -3 -3.85" /></symbol>
+  <symbol id="i-camera" viewBox="0 0 24 24"><path d="M5 7h1a2 2 0 0 0 2 -2a1 1 0 0 1 1 -1h6a1 1 0 0 1 1 1a2 2 0 0 0 2 2h1a2 2 0 0 1 2 2v9a2 2 0 0 1 -2 2h-14a2 2 0 0 1 -2 -2v-9a2 2 0 0 1 2 -2" /> <path d="M9 13a3 3 0 1 0 6 0a3 3 0 0 0 -6 0" /></symbol>
+  <symbol id="i-user-plus" viewBox="0 0 24 24"><path d="M8 7a4 4 0 1 0 8 0a4 4 0 0 0 -8 0" /> <path d="M16 19h6" /> <path d="M19 16v6" /> <path d="M6 21v-2a4 4 0 0 1 4 -4h4" /></symbol>
+  <symbol id="i-crown" viewBox="0 0 24 24"><path d="M12 6l4 6l5 -4l-2 10h-14l-2 -10l5 4z" /></symbol>
+  <symbol id="i-logout" viewBox="0 0 24 24"><path d="M14 8v-2a2 2 0 0 0 -2 -2h-7a2 2 0 0 0 -2 2v12a2 2 0 0 0 2 2h7a2 2 0 0 0 2 -2v-2" /> <path d="M9 12h12l-3 -3" /> <path d="M18 15l3 -3" /></symbol>
   <symbol id="i-fire" viewBox="0 0 24 24"><path d="M4 21l16 -4" /> <path d="M20 21l-16 -4" /> <path d="M12 15a4 4 0 0 0 4 -4c0 -3 -2 -3 -2 -8c-4 2 -6 5 -6 8a4 4 0 0 0 4 4" /></symbol>
 </svg>
 
 <script src="tide.js"></script>
 <script src="sound.js"></script>
 <script src="sfx.js"></script>
+<script src="presence.js"></script>
 <script src="app.js"></script>
 </body>
 </html>

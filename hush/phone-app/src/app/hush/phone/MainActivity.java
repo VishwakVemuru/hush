@@ -41,10 +41,10 @@ public class MainActivity extends Activity {
     private static final String NAVY = "#1F3550", MUTED = "#8A8274", BG = "#F3EFE7", CARD = "#FBF8F2", MOSS = "#5E8A5A",
             SIDE = "#EBE5D9", LINE = "#E6DFD1";
     private final Handler h = new Handler(Looper.getMainLooper());
-    private int tab = 0;            // 0 phone, 1 combined, 2 blocking
+    private int tab = 0;            // 0 phone, 1 combined, 2 friends, 3 blocking
     private boolean week = false;
     private LinearLayout body;
-    private final TextView[] tabBtns = new TextView[3];
+    private final TextView[] tabBtns = new TextView[4];
     private Stats.Result shown;
     private final Map<String, String> labelToPkg = new HashMap<>();
 
@@ -73,8 +73,8 @@ public class MainActivity extends Activity {
         LinearLayout tabs = new LinearLayout(this);
         tabs.setPadding(dp(3), dp(3), dp(3), dp(3));
         tabs.setBackground(round(SIDE, 999));
-        String[] names = {"Phone", "Combined", "Blocking"};
-        for (int i = 0; i < 3; i++) {
+        String[] names = {"Phone", "Combined", "Friends", "Blocking"};
+        for (int i = 0; i < 4; i++) {
             final int k = i;
             TextView t = text(names[i], 14, MUTED);
             t.setGravity(Gravity.CENTER);
@@ -96,18 +96,19 @@ public class MainActivity extends Activity {
         root.addView(sv, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, 0, 1));
         setContentView(root);
         loadLabels();
-        showTab(Link.prefs(this).getString("code", "").isEmpty() ? 2 : 0);
+        showTab(Link.prefs(this).getString("code", "").isEmpty() ? 3 : 0);
     }
 
     @Override
     protected void onResume() {
         super.onResume();
-        if (tab == 2) refresh.run();
+        if (tab == 3) refresh.run();
+        else if (tab == 2) renderFriends();
         else render();
         // pull fresh numbers in the background, then redraw
         new Thread(() -> {
             Cloud.syncQuietly(MainActivity.this);
-            h.post(() -> { if (tab != 2) render(); });
+            h.post(() -> { if (tab < 2) render(); });
         }).start();
     }
 
@@ -119,7 +120,7 @@ public class MainActivity extends Activity {
 
     private void showTab(int k) {
         tab = k;
-        for (int i = 0; i < 3; i++) {
+        for (int i = 0; i < 4; i++) {
             TextView t = tabBtns[i];
             t.setBackground(i == k ? round(CARD, 999) : null);
             t.setTextColor(Color.parseColor(i == k ? NAVY : MUTED));
@@ -127,7 +128,8 @@ public class MainActivity extends Activity {
         }
         h.removeCallbacks(refresh);
         body.removeAllViews();
-        if (k == 2) { buildBlocking(); refresh.run(); }
+        if (k == 3) { buildBlocking(); refresh.run(); }
+        else if (k == 2) renderFriends();
         else render();
     }
 
@@ -135,7 +137,7 @@ public class MainActivity extends Activity {
     // Screen time tabs
     // =====================================================================
     private void render() {
-        if (tab == 2) return;
+        if (tab >= 2) return;
         final boolean combined = tab == 1;
         final boolean wk = week;
         final int myTab = tab;
@@ -400,6 +402,139 @@ public class MainActivity extends Activity {
         return m < 1 ? "just now" : m < 60 ? m + " min ago" : (m / 60) + " h ago";
     }
 
+
+    // =====================================================================
+    // Friends tab: account + leaderboard
+    // =====================================================================
+    private boolean lbWeek = true;
+
+    private void renderFriends() {
+        body.removeAllViews();
+        if (Cloud.username(this).isEmpty()) {
+            LinearLayout c = card(body);
+            c.addView(title("Sign in to hush."));
+            c.addView(text("Use the same account as on your laptop to see the friends leaderboard. No account yet? Create one in the laptop app (Friends tab).", 14, MUTED));
+            final EditText u = new EditText(this);
+            u.setHint("Username");
+            u.setSingleLine(true);
+            c.addView(u);
+            final EditText pw = new EditText(this);
+            pw.setHint("Password");
+            pw.setInputType(InputType.TYPE_CLASS_TEXT | InputType.TYPE_TEXT_VARIATION_PASSWORD);
+            c.addView(pw);
+            final TextView err = text("", 13, "#A0522D");
+            c.addView(err);
+            Button go = button("Sign in");
+            go.setOnClickListener(v -> {
+                go.setEnabled(false);
+                final String un = u.getText().toString().trim().toLowerCase(), ps = pw.getText().toString();
+                new Thread(() -> {
+                    final String e = Cloud.login(MainActivity.this, un, ps);
+                    if (e == null) Cloud.syncQuietly(MainActivity.this);
+                    h.post(() -> {
+                        go.setEnabled(true);
+                        if (e != null) err.setText(e);
+                        else { Toast.makeText(MainActivity.this, "Signed in as @" + Cloud.username(MainActivity.this), Toast.LENGTH_SHORT).show(); renderFriends(); }
+                    });
+                }).start();
+            });
+            c.addView(go);
+            return;
+        }
+        LinearLayout bar = new LinearLayout(this);
+        bar.setGravity(Gravity.CENTER_VERTICAL);
+        LinearLayout seg = new LinearLayout(this);
+        seg.setPadding(dp(3), dp(3), dp(3), dp(3));
+        seg.setBackground(round(SIDE, 999));
+        String[] rn = {"Today", "Week"};
+        for (int i = 0; i < 2; i++) {
+            final boolean w = i == 1;
+            TextView t = text(rn[i], 13, w == lbWeek ? NAVY : MUTED);
+            t.setPadding(dp(16), dp(6), dp(16), dp(6));
+            if (w == lbWeek) { t.setBackground(round(CARD, 999)); t.setTypeface(Typeface.DEFAULT_BOLD); }
+            t.setOnClickListener(v -> { lbWeek = w; renderFriends(); });
+            seg.addView(t);
+        }
+        bar.addView(seg);
+        View sp = new View(this);
+        bar.addView(sp, new LinearLayout.LayoutParams(0, 1, 1));
+        TextView who = text("@" + Cloud.username(this), 13, MUTED);
+        who.setOnLongClickListener(v -> { Cloud.logout(MainActivity.this); renderFriends(); return true; });
+        bar.addView(who);
+        LinearLayout.LayoutParams blp = new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
+        blp.bottomMargin = dp(12);
+        body.addView(bar, blp);
+        final LinearLayout lb = card(body);
+        lb.addView(text("Leaderboard · verified = camera saw you studying", 13, MUTED));
+        final TextView loading = text("Loading…", 14, MUTED);
+        lb.addView(loading);
+        final boolean wk = lbWeek;
+        new Thread(() -> {
+            org.json.JSONArray rows = null;
+            String err = null;
+            try { rows = Cloud.leaderboard(MainActivity.this, wk).optJSONArray("rows"); } catch (Exception e) { err = "Can't load the leaderboard right now."; }
+            final org.json.JSONArray fr = rows;
+            final String fe = err;
+            h.post(() -> {
+                if (tab != 2 || lbWeek != wk) return;
+                lb.removeView(loading);
+                if (fe != null || fr == null) { lb.addView(text(fe != null ? fe : "Nothing yet.", 14, MUTED)); return; }
+                long max = 1;
+                for (int i = 0; i < fr.length(); i++) max = Math.max(max, fr.optJSONObject(i).optLong("focus_s"));
+                for (int i = 0; i < fr.length(); i++) lb.addView(lbRow(i, fr.optJSONObject(i), max));
+                if (fr.length() < 2) lb.addView(text("Add friends by username in the laptop app and you'll compete here.", 13, MUTED));
+            });
+        }).start();
+        TextView hint = text("Long-press your username to sign out.", 12, MUTED);
+        hint.setGravity(Gravity.CENTER);
+        body.addView(hint);
+    }
+
+    private View lbRow(int i, org.json.JSONObject x, long max) {
+        LinearLayout line = new LinearLayout(this);
+        line.setGravity(Gravity.CENTER_VERTICAL);
+        line.setPadding(dp(8), dp(10), dp(8), dp(10));
+        if (x.optBoolean("me")) line.setBackground(round("#E3EAF3", 12));
+        TextView rk = text(String.valueOf(i + 1), 18, i == 0 && x.optLong("verified_s") > 0 ? "#C9A15A" : MUTED);
+        rk.setTypeface(Typeface.create(Typeface.SERIF, Typeface.NORMAL));
+        line.addView(rk, new LinearLayout.LayoutParams(dp(26), ViewGroup.LayoutParams.WRAP_CONTENT));
+        LinearLayout mid = new LinearLayout(this);
+        mid.setOrientation(LinearLayout.VERTICAL);
+        String streak = x.optInt("streak") > 0 ? "  · " + x.optInt("streak") + "d streak" : "";
+        TextView nm = text(x.optString("display") + (x.optBoolean("me") ? "  (you)" : ""), 15, "#2B3440");
+        nm.setSingleLine(true);
+        mid.addView(nm);
+        mid.addView(text("@" + x.optString("username") + streak, 12, MUTED));
+        FrameLayout track = new FrameLayout(this);
+        track.setBackground(round(LINE, 3));
+        final View all = new View(this), ver = new View(this);
+        all.setBackground(round("#C7D3E2", 3));
+        ver.setBackground(round(MOSS, 3));
+        track.addView(all, new FrameLayout.LayoutParams(0, dp(6)));
+        track.addView(ver, new FrameLayout.LayoutParams(0, dp(6)));
+        LinearLayout.LayoutParams tlp = new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(6));
+        tlp.topMargin = dp(6);
+        mid.addView(track, tlp);
+        final float fa = x.optLong("focus_s") / (float) max, fv = x.optLong("verified_s") / (float) max;
+        track.post(() -> {
+            ViewGroup.LayoutParams a = all.getLayoutParams(); a.width = (int) (track.getWidth() * fa); all.setLayoutParams(a);
+            ViewGroup.LayoutParams v = ver.getLayoutParams(); v.width = (int) (track.getWidth() * fv); ver.setLayoutParams(v);
+        });
+        LinearLayout.LayoutParams mlp = new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1);
+        mlp.setMarginStart(dp(8));
+        mlp.setMarginEnd(dp(12));
+        line.addView(mid, mlp);
+        LinearLayout nums = new LinearLayout(this);
+        nums.setOrientation(LinearLayout.VERTICAL);
+        nums.setGravity(Gravity.END);
+        TextView v1 = text(Stats.dur(x.optLong("verified_s")), 16, MOSS);
+        v1.setTypeface(Typeface.DEFAULT_BOLD);
+        nums.addView(v1);
+        nums.addView(text(Stats.dur(x.optLong("focus_s")) + " focus", 12, MUTED));
+        line.addView(nums);
+        return line;
+    }
+
     // =====================================================================
     // Blocking tab (pairing, accessibility, app picker)
     // =====================================================================
@@ -457,7 +592,7 @@ public class MainActivity extends Activity {
 
     private final Runnable refresh = new Runnable() {
         public void run() {
-            if (tab != 2) return;
+            if (tab != 3) return;
             updateStatus();
             h.postDelayed(this, 2000);
         }

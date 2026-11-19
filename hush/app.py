@@ -10,6 +10,9 @@ import threading
 import time
 
 BASE = os.path.dirname(os.path.abspath(__file__))
+if getattr(sys, "frozen", False):
+    # installed hush.exe: ui/, assets/ etc. are unpacked next to the bundled code
+    BASE = getattr(sys, "_MEIPASS", os.path.dirname(sys.executable))
 sys.path.insert(0, BASE)
 
 from core import win  # noqa: E402
@@ -59,7 +62,7 @@ def _fresh_ui_cache(data, log):
 
 
 def main():
-    data = os.path.join(os.environ.get("LOCALAPPDATA") or os.path.expanduser("~"), "hush")
+    data = win.data_dir()
     os.makedirs(data, exist_ok=True)
     logging.basicConfig(filename=os.path.join(data, "hush.log"), level=logging.INFO,
                         format="%(asctime)s %(name)s %(levelname)s %(message)s")
@@ -75,6 +78,10 @@ def main():
                                                           " --autoplay-policy=no-user-gesture-required --disable-background-timer-throttling"
                                                           " --disable-renderer-backgrounding --disable-backgrounding-occluded-windows").strip()
     import webview  # imported late so the second-instance path stays fast
+    import mimetypes
+    # the camera check loads an ES module and WebAssembly; Windows' registry often lacks these types
+    mimetypes.add_type("text/javascript", ".mjs")
+    mimetypes.add_type("application/wasm", ".wasm")
     _fresh_ui_cache(data, log)
 
     start_hidden = "--tray" in sys.argv
@@ -228,16 +235,11 @@ def main():
 
     def play_hidden(kind):
         """When the window is hidden, phase chimes are played by Python (the webview may be asleep)."""
-        if hub.ui_visible or not win.IS_WIN or not settings().get("sfx", True):
+        if hub.ui_visible or not (win.IS_WIN or win.IS_MAC) or not settings().get("sfx", True):
             return
         name = SOUNDS.get(kind)
-        if not name:
-            return
-        try:
-            import winsound
-            winsound.PlaySound(os.path.join(BASE, "ui", "sounds", name + ".wav"), winsound.SND_FILENAME | winsound.SND_ASYNC | winsound.SND_NODEFAULT)
-        except Exception:
-            pass
+        if name:
+            win.play_sound(os.path.join(BASE, "ui", "sounds", name + ".wav"))
 
     hub.on_notify = play_hidden
 
@@ -319,7 +321,8 @@ def main():
         tracker.start()
         blocker.start()
         cloud.start()
-        tray.start()
+        if not win.IS_MAC:
+            tray.start()  # on macOS it's started on the main thread, before the window loop
         win.start_hotkey(toggle)
         if start_hidden and engine.state()["phase"] != "idle":
             maybe_mini()
@@ -350,6 +353,8 @@ def main():
             n += 1
             time.sleep(0.5)
 
+    if win.IS_MAC:
+        tray.start()  # AppKit wants the menu-bar icon created on the main thread
     webview.start(lambda: threading.Thread(target=background, daemon=True).start(),
                   storage_path=os.path.join(data, "webview"), private_mode=False)
     try:

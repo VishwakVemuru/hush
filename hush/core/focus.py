@@ -6,6 +6,9 @@ import time
 
 PHRASE = "i am choosing to stop focusing right now"
 GRACE = 10  # seconds to save your game before blocked apps close
+PRESENCE_FRESH = 5  # a camera reading counts for this many seconds
+# per-session counters: tracked/distracted come from the app tracker, the rest tick every second of focus
+CUR0 = {"tracked": 0, "distracted": 0, "blocked": 0, "elapsed": 0, "verified": 0, "phone": 0, "away": 0, "camera": 0}
 
 
 def _norm(s):
@@ -20,14 +23,15 @@ class FocusEngine:
         self.tokens = {}
         self.summary = None
         self._last_save = 0
+        self.presence = ("", 0.0)   # (present|away|phone, time) from the camera check
         self.s = self._blank()
         self._restore()
 
     def _blank(self):
         return {"phase": "idle", "label": "", "mode": "soft", "focus_min": 50, "break_min": 10,
                 "sessions": 4, "index": 1, "ends_at": 0.0, "paused": False, "remaining": 0.0,
-                "phase_total": 0.0, "focus_id": None, "grace_until": 0.0,
-                "cur": {"tracked": 0, "distracted": 0, "blocked": 0},
+                "phase_total": 0.0, "focus_id": None, "grace_until": 0.0, "started_at": 0.0,
+                "cur": dict(CUR0),
                 "cycle": {"tracked": 0, "distracted": 0, "blocked": 0, "done": 0, "started": 0}}
 
     # ---------- persistence ----------
@@ -43,13 +47,16 @@ class FocusEngine:
         if st.get("paused") or st.get("ends_at", 0) > now:
             base = self._blank()
             base.update(st)
+            base["cur"] = {**CUR0, **(st.get("cur") or {})}
             self.s = base
             if self.s["phase"] == "focus":
                 self.s["grace_until"] = now + GRACE
         else:
             if st.get("focus_id"):
-                c = st.get("cur", {})
-                self.db.focus_end(st["focus_id"], c.get("tracked", 0), c.get("distracted", 0), c.get("blocked", 0), True)
+                c = {**CUR0, **(st.get("cur") or {})}
+                self.db.focus_end(st["focus_id"], c["tracked"], c["distracted"], c["blocked"], True,
+                                  c["verified"], c["phone"], c["away"])
+                self._log_session(st, c, True, end=st.get("ends_at") or now)
             self.db.set("focus_state", self._blank())
 
     def _emit(self, what):
@@ -69,15 +76,17 @@ class FocusEngine:
     def _begin_focus(self):
         s = self.s
         secs = s["focus_min"] * 60
-        s.update(phase="focus", paused=False, ends_at=time.time() + secs, phase_total=secs,
-                 grace_until=time.time() + GRACE, cur={"tracked": 0, "distracted": 0, "blocked": 0})
+        s.update(phase="focus", paused=False, ends_at=time.time() + secs, phase_total=secs, started_at=time.time(),
+                 grace_until=time.time() + GRACE, cur=dict(CUR0))
         s["focus_id"] = self.db.focus_start(s["label"], s["mode"], secs)
 
     def _close_focus(self, completed):
         s = self.s
         if s["focus_id"]:
             c = s["cur"]
-            self.db.focus_end(s["focus_id"], c["tracked"], c["distracted"], c["blocked"], completed)
+            self.db.focus_end(s["focus_id"], c["tracked"], c["distracted"], c["blocked"], completed,
+                              c["verified"], c["phone"], c["away"])
+            self._log_session(s, c, completed)
             for k in ("tracked", "distracted", "blocked"):
                 s["cycle"][k] += c[k]
             if completed:
@@ -212,6 +221,52 @@ class FocusEngine:
                 if distracting:
                     s["cur"]["distracted"] += 1
 
+    def set_presence(self, state):
+        """Latest camera reading: 'present', 'away' or 'phone'."""
+        if state in ("present", "away", "phone"):
+            self.presence = (state, time.time())
+
+    def tick_second(self):
+        """Called once a second whether or not you're touching the keyboard (reading a book counts)."""
+        with self.lock:
+            s = self.s
+            if s["phase"] != "focus" or s["paused"]:
+                return
+            c = s["cur"]
+            c["elapsed"] += 1
+            state, ts = self.presence
+            if state and time.time() - ts <= PRESENCE_FRESH:
+                c["camera"] = 1
+                if state == "present":
+                    c["verified"] += 1
+                elif state == "phone":
+                    c["phone"] += 1
+                else:
+                    c["away"] += 1
+
+    def _log_session(self, s, c, completed, end=None):
+        """Queue a finished focus session for the friends leaderboard (uploaded by the cloud sync)."""
+        try:
+            dev = self.db.get("device_id")
+            if not dev:
+                dev = secrets.token_hex(6)
+                self.db.set("device_id", dev)
+            end = end or time.time()
+            start = s.get("started_at") or (end - c["elapsed"])
+            wall = max(1, end - start)
+            focus_s = min(c["elapsed"], int(wall))
+            if focus_s < 60:
+                return  # under a minute isn't worth a leaderboard row
+            rec = {"client_id": f"{dev}-{s['focus_id']}", "start": int(start * 1000), "end": int(end * 1000),
+                   "planned_s": int(s.get("phase_total") or 0), "focus_s": focus_s,
+                   "verified_s": min(c["verified"], focus_s), "phone_s": c["phone"], "away_s": c["away"],
+                   "camera": bool(c["camera"]), "completed": bool(completed)}
+            q = self.db.get("focus_log_queue") or []
+            q.append(rec)
+            self.db.set("focus_log_queue", q[-200:])
+        except Exception:
+            pass
+
     def add_block(self, target):
         with self.lock:
             if self.s["phase"] == "focus":
@@ -235,5 +290,7 @@ class FocusEngine:
                     "left": self._left(), "ends_at": s["ends_at"], "total": s["phase_total"], "index": s["index"],
                     "sessions": s["sessions"], "focus_min": s["focus_min"], "break_min": s["break_min"],
                     "blocked": c["blocked"], "tracked": c["tracked"], "distracted": c["distracted"],
+                    "verified": c.get("verified", 0), "elapsed": c.get("elapsed", 0),
+                    "presence": self.presence[0] if time.time() - self.presence[1] <= PRESENCE_FRESH else "",
                     "grace": max(0, s["grace_until"] - time.time()) if s["phase"] == "focus" else 0,
                     "summary": self.summary, "now": time.time()}
