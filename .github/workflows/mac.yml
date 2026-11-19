@@ -38,7 +38,7 @@ jobs:
       - name: Build hush.app
         working-directory: hush
         env:
-          HUSH_VERSION: ${{ github.event.release.tag_name || inputs.tag || '1.4.0' }}
+          HUSH_VERSION: ${{ github.event.release.tag_name || inputs.tag || '1.4.1' }}
         run: python -m PyInstaller --noconfirm --clean --distpath dist --workpath build packaging/hush-mac.spec
 
       - name: Smoke test (app starts and stays up)

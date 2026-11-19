@@ -66,13 +66,26 @@ window.Presence = (() => {
     if (stream) timer = setInterval(tick, live > 0 ? TICK_LIVE_MS : TICK_MS);
   }
 
-  async function start() {
-    if (stream) return true;
+  let starting = null, wantOn = false;
+  // Only one start at a time. Overlapping starts each opened their own camera stream and only the last was
+  // tracked, so the extras were never closed and the camera light could stay on after focus ended.
+  function start() {
+    wantOn = true;
+    if (stream) return Promise.resolve(true);
+    if (!starting) starting = open().finally(() => { starting = null; });
+    return starting;
+  }
+
+  async function open() {
     await load();
-    stream = await navigator.mediaDevices.getUserMedia({ video: { width: 640, height: 480, frameRate: { ideal: 15, max: 30 } }, audio: false });
-    video = document.createElement('video');
-    video.muted = true; video.playsInline = true; video.srcObject = stream;
-    await video.play();
+    const s = await navigator.mediaDevices.getUserMedia({ video: { width: 640, height: 480, frameRate: { ideal: 15, max: 30 } }, audio: false });
+    const v = document.createElement('video');
+    v.muted = true; v.playsInline = true; v.srcObject = s;
+    try { await v.play(); } catch (e) { /* stopped mid-start; handled just below */ }
+    // stop() was called while we were starting: close this stream instead of leaving the camera on
+    if (!wantOn) { s.getTracks().forEach(t => t.stop()); v.srcObject = null; return false; }
+    // only now does the camera count as running, so nothing can stop it halfway through starting
+    stream = s; video = v;
     lastSeen = 0; lastPhone = 0; state = '';
     schedule();
     tick();
@@ -81,6 +94,7 @@ window.Presence = (() => {
   }
 
   function stop() {
+    wantOn = false;
     clearInterval(timer); timer = null;
     if (stream) stream.getTracks().forEach(t => t.stop());
     stream = null;

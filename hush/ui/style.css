@@ -558,3 +558,13 @@ input[type=range]::-webkit-slider-thumb:hover { transform: scale(1.15); }
 .ds-lab { font-size: 11.5px; white-space: nowrap; font-weight: 500; }
 .ds-tot { font-size: 11px; color: var(--muted); font-variant-numeric: tabular-nums; }
 .ds-day.empty .ds-lab { opacity: .6; }
+
+/* ---------- update banner ---------- */
+.upd-banner { position: fixed; left: 50%; bottom: 22px; transform: translateX(-50%); z-index: 90; display: flex; align-items: center; gap: 12px;
+  padding: 10px 10px 10px 16px; border-radius: 16px; background: var(--navy); color: #E3EAF3; font-size: 13.5px;
+  box-shadow: 0 2px 4px rgba(22, 38, 58, .15), 0 18px 40px -12px rgba(22, 38, 58, .5); animation: fadeUp .3s var(--ease) both; max-width: calc(100vw - 32px); }
+.upd-banner > .i { width: 18px; height: 18px; flex: none; color: #8FBF89; }
+.upd-banner b { color: #fff; font-weight: 600; }
+.upd-banner .btn.primary { background: #E3EAF3; color: var(--navy); border-color: #E3EAF3; white-space: nowrap; }
+.upd-banner .btn.ghost { color: #A9BBD1; }
+.upd-banner .btn.ghost:hover { color: #fff; background: rgba(227, 234, 243, .1); }

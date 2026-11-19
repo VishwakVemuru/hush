@@ -40,6 +40,8 @@ Root: HKCU; Subkey: "Software\Microsoft\Windows\CurrentVersion\Run"; ValueType: 
 
 [Run]
 Filename: "{app}\hush.exe"; Description: "Open hush."; Flags: nowait postinstall skipifsilent
+; in-app updates run this installer silently: reopen hush afterwards
+Filename: "{app}\hush.exe"; Flags: nowait runasoriginaluser; Check: WizardSilent
 
 [UninstallRun]
 Filename: "{cmd}"; Parameters: "/c taskkill /im hush.exe /f"; Flags: runhidden; RunOnceId: "killhush"

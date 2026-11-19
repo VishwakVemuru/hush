@@ -1,8 +1,9 @@
 # Builds dist\hush\hush.exe (PyInstaller) and dist\hush-setup.exe (Inno Setup 6).
 # Needs: pip install pyinstaller pywebview psutil pystray Pillow   and   winget install JRSoftware.InnoSetup
-param([string]$Version = "1.4.0")
+param([string]$Version = "")
 $ErrorActionPreference = 'Stop'
 $root = Split-Path $PSScriptRoot
+if (-not $Version) { $Version = ([regex]::Match((Get-Content -Raw "$root\core\version.py"), 'VERSION = "([^"]+)"')).Groups[1].Value }
 Push-Location $root
 try {
     Remove-Item build, dist -Recurse -Force -ErrorAction SilentlyContinue
@@ -18,5 +19,8 @@ try {
     & $iscc /Q packaging\installer.iss
     if ($LASTEXITCODE -ne 0) { throw "Inno Setup failed ($LASTEXITCODE)" }
     $s = Get-Item dist\hush-setup.exe
-    "Installer ready: $($s.FullName) ($([math]::Round($s.Length / 1MB, 1)) MB)"
+    # the in-app updater refuses a download that doesn't match this checksum
+    $hash = (Get-FileHash dist\hush-setup.exe -Algorithm SHA256).Hash.ToLower()
+    [IO.File]::WriteAllText("$root\dist\hush-setup.exe.sha256", "$hash  hush-setup.exe`n")
+    "Installer ready: $($s.FullName) ($([math]::Round($s.Length / 1MB, 1)) MB), version $Version, sha256 $hash"
 } finally { Pop-Location }

@@ -633,6 +633,40 @@
     });
   }
 
+  /* ---------- updates ---------- */
+  async function autoUpdateCheck() {
+    if (!api.update_check) return;
+    try {
+      const u = await api.update_check();
+      if (u.newer && lsGet('hush.skipUpdate', '') !== u.latest) updateBanner(u);
+    } catch (e) {}
+  }
+  function updateBanner(u) {
+    if ($('.upd-banner')) return;
+    const el = document.createElement('div');
+    el.className = 'upd-banner'; el.setAttribute('role', 'status');
+    el.innerHTML = `${ic('download')}<span><b>hush. ${esc(u.latest)} is out.</b> ${u.can_install ? 'Update in place, your data stays.' : 'Get it from the website.'}</span>
+      <button class="btn sm primary" data-go>${u.can_install ? 'Update now' : 'Download'}</button><button class="btn sm ghost icon" data-later aria-label="Not now" title="Not now">${ic('x')}</button>`;
+    document.body.appendChild(el);
+    $('[data-later]', el).onclick = () => { lsSet('hush.skipUpdate', u.latest); el.remove(); };
+    $('[data-go]', el).onclick = async () => {
+      if (!u.can_install) { api.open_download_page(); el.remove(); return; }
+      const r = await api.update_install();
+      if (!r.ok) { toast(r.error || 'Update failed', 'block'); return; }
+      const btn = $('[data-go]', el); btn.disabled = true;
+      const tick = async () => {
+        const s = await api.update_status();
+        if (s.state === 'downloading') { btn.textContent = `Downloading ${Math.round(s.progress * 100)}%`; setTimeout(tick, 400); }
+        else if (s.state === 'installing') btn.textContent = 'Installing… hush will reopen';
+        else if (s.state === 'error') { btn.disabled = false; btn.textContent = 'Try again'; toast(s.error, 'block'); }
+        else setTimeout(tick, 400);
+      };
+      tick();
+    };
+  }
+  setTimeout(autoUpdateCheck, 15000);
+  setInterval(autoUpdateCheck, 6 * 3600 * 1000);
+
   /* ---------- camera study check ---------- */
   const CAM_TXT = { present: 'verified · face in view', away: 'face not in view · not counted', phone: 'phone spotted · not counted' };
   let camErrShown = false, camLastSent = 0, camFloat = null, camTesting = false;
@@ -669,7 +703,8 @@
   function syncCamera() {
     if (!window.Presence) return;
     const want = !!settings.camera_check && inFocus();
-    if (want && !Presence.running) Presence.start().then(() => { camErrShown = false; }).catch(e => {
+    // camera may finish starting after focus already ended (models take ~1 s to load): check again once it's up
+    if (want && !Presence.running) Presence.start().then(() => { camErrShown = false; camOffIfIdle(); }).catch(e => {
       if (!camErrShown) { camErrShown = true; toast('Study check couldn\'t use the camera, so this session counts as unverified.', 'block'); }
     });
     if (!want && Presence.running && !camTesting) Presence.stop();
@@ -678,6 +713,17 @@
     if (want) badge(Presence.state);
     syncFloat(want);
   }
+  /** The camera only ever runs during an active focus session (or while you're testing it in Settings). */
+  function camOffIfIdle() {
+    if (window.Presence && Presence.running && !camTesting && !(settings.camera_check && inFocus())) {
+      Presence.stop();
+      syncFloat(false);
+      const b = $('#camBadge'); if (b) b.hidden = true;
+    }
+  }
+  // watchdog: independent of the timer refresh, so the camera turns off within 2 s of focus ending, pausing, or a break
+  setInterval(camOffIfIdle, 2000);
+
   if (window.Presence) Presence.on(st => {
     if (!st) return;
     // tell the focus engine (it counts verified / away / phone seconds)
@@ -982,7 +1028,8 @@
       </div>
       <div class="card">
         <p class="label"><span>About</span></p>
-        <div class="set-row"><div><div class="t" style="font-family:var(--serif);font-style:italic;font-size:22px;color:var(--navy)">hush.</div><div class="d">Version 1.3 · made for deep work</div></div><button class="btn sm ghost" id="replayIntro">${ic('sparkle')}Replay intro</button></div>
+        <div class="set-row"><div><div class="t" style="font-family:var(--serif);font-style:italic;font-size:22px;color:var(--navy)">hush.</div><div class="d">Version ${esc(B.version || '')} · made for deep work</div></div><button class="btn sm ghost" id="replayIntro">${ic('sparkle')}Replay intro</button></div>
+        <div class="set-row"><div><div class="t">Updates</div><div class="d" id="updTxt">hush. checks for new versions by itself and updates in place, keeping your data</div></div><button class="btn sm" id="updBtn">${ic('refresh')}Check for updates</button></div>
         <div class="set-row"><div><div class="t">Keyboard</div><div class="d"><span class="kbd">Space</span> start / pause · <span class="kbd">1</span>–<span class="kbd">5</span> switch screens · <span class="kbd">F</span> full-screen timer · <span class="kbd">Esc</span> close</div></div></div>
       </div>`;
     stagger(g);
@@ -1002,6 +1049,13 @@
     $('#sfxTest').onclick = () => { const seq = ['start', 'block', 'break', 'complete']; seq.forEach((n, i) => setTimeout(() => SFX.play(n), i * 1100)); };
     $('#shortcutBtn').onclick = async () => toast((await api.create_shortcut()) ? 'Shortcut added to your desktop and Start menu' : 'Could not create the shortcut', 'success');
     $('#replayIntro').onclick = () => onboarding();
+    $('#updBtn').onclick = async () => {
+      $('#updBtn').disabled = true; $('#updTxt').textContent = 'Checking…';
+      const u = await api.update_check();
+      $('#updBtn').disabled = false;
+      $('#updTxt').textContent = u.error ? u.error : u.newer ? `Version ${u.latest} is ready (you have ${u.current})` : `You're on the latest version (${u.current})`;
+      if (u.newer) updateBanner(u);
+    };
     const showPhone = p => {
       if (!p || !$('#phoneCode')) return;
       $('#phoneCode').textContent = p.code.replace(/(\d{4})(\d{4})/, '$1 $2');

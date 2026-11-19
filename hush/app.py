@@ -23,6 +23,7 @@ from core.blocker import Blocker  # noqa: E402
 from core.bridge import Bridge  # noqa: E402
 from core.phonelink import PhoneLink  # noqa: E402
 from core.cloud import Cloud  # noqa: E402
+from core.updater import Updater  # noqa: E402
 from core.tracker import Tracker  # noqa: E402
 from core.api import Api, DEFAULT_SETTINGS  # noqa: E402
 from core.names import DEFAULT_CATS  # noqa: E402
@@ -266,7 +267,8 @@ def main():
     ctx = {"icons": icons, "ico": ICO, "db": db, "engine": engine, "blocker": blocker, "bridge": bridge, "phone": phone, "cloud": cloud, "hub": hub, "tracker": tracker,
            "categorize": categorize, "script": os.path.join(BASE, "app.py"), "base": BASE,
            "show_main": show_main, "hide_main": hide_main, "quit": quit_app, "fullscreen": set_fullscreen,
-           "sync_mini": lambda: sync_mini(), "close_mini": close_mini}
+           "sync_mini": lambda: sync_mini(), "close_mini": close_mini,
+           "updater": Updater(engine, hub, quit_app)}
     api = Api(ctx)
 
     ui = lambda f: os.path.join(BASE, "ui", f)  # noqa: E731

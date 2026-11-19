@@ -8,6 +8,7 @@ import psutil
 
 from . import win, stats
 from .focus import PHRASE
+from .version import VERSION
 from .names import CATEGORIES, DEFAULT_CATS, CAT_COLORS, pretty
 
 DEFAULT_SETTINGS = {
@@ -41,7 +42,7 @@ class Api:
         c = self._ctx
         return {"settings": self._settings(), "categories": CATEGORIES, "colors": CAT_COLORS,
                 "phrase": PHRASE, "admin": win.is_admin(), "startup": win.get_startup(),
-                "is_windows": win.IS_WIN, "last_event": c["hub"].last_id(), "version": "1.3"}
+                "is_windows": win.IS_WIN, "last_event": c["hub"].last_id(), "version": VERSION}
 
     def overview(self):
         return stats.overview(self._ctx["db"], float(self._settings()["goal_hours"]))
@@ -336,6 +337,27 @@ class Api:
             self._ctx["quit"](force=True)
             return True
         return False
+
+    # ---------- updates ----------
+    def update_check(self):
+        u = self._ctx.get("updater")
+        return u.check() if u else {"current": VERSION, "newer": False}
+
+    def update_status(self):
+        u = self._ctx.get("updater")
+        return u.status() if u else {"current": VERSION, "newer": False}
+
+    def update_install(self):
+        u = self._ctx.get("updater")
+        return u.install() if u else {"ok": False, "error": "Updates aren't available"}
+
+    def open_download_page(self):
+        import webbrowser
+        u = self._ctx.get("updater")
+        url = (u.status().get("page") if u else None) or "https://hush-focus.vercel.app/#download"
+        if url.startswith("https://"):
+            webbrowser.open(url)
+        return True
 
     def open_extension_folder(self):
         win.open_path(os.path.join(self._ctx["base"], "extension"))
