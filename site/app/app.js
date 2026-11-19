@@ -656,55 +656,129 @@
   /* ---------- friends & leaderboard ---------- */
   let lbRange = 'week', acct = null;
   const initial = n => esc(String(n || '?')[0].toUpperCase());
+  const RANGE_WORD = { day: 'today', week: 'this week', month: 'this month' };
+  const SITE = 'https://hush-focus.vercel.app';
+  async function copyText(t, what) {
+    try { await navigator.clipboard.writeText(t); toast(`${what} copied`, 'success'); }
+    catch (e) { toast(`Couldn't copy. ${what}: ${t}`, 'info'); }
+  }
+
   async function loadFriends() {
     acct = await api.account_status();
     requestAnimationFrame(() => segPill($('#lbSeg')));
     const body = $('#friendsBody');
     $('#lbSeg').style.visibility = acct.signed_in ? '' : 'hidden';
     if (!acct.signed_in) { renderSignIn(body); return; }
-    $('#friendsSub').textContent = `Signed in as @${acct.username}`;
-    body.innerHTML = `<div class="friends-grid"><div class="card lb-card"><p class="label"><span>Leaderboard</span><span>verified = camera saw you studying</span></p><div id="lb"><div class="sub" style="padding:18px 0">Loading…</div></div></div>
-      <div class="friends-side"><div class="card"><p class="label"><span>Add a friend</span></p>
-        <div class="add-row"><input type="text" id="addFriend" placeholder="their username" maxlength="20" autocomplete="off"><button class="btn sm primary" id="addFriendBtn">${ic('user-plus')}Add</button></div>
-        <div class="sub" style="margin-top:8px">Share yours: <b class="mono">@${esc(acct.username)}</b></div></div>
-        <div class="card" id="reqCard"><p class="label"><span>Friends</span></p><div id="friendList"></div></div>
-        <div class="acct-row"><span>${ic('cloud')}@${esc(acct.username)}</span><button class="btn sm ghost" id="logoutBtn">${ic('logout')}Log out</button></div></div></div>`;
-    $('#addFriendBtn').onclick = addFriend;
-    $('#addFriend').onkeydown = e => { if (e.key === 'Enter') addFriend(); };
+    $('#friendsSub').textContent = 'Focus together, honestly';
+    body.innerHTML = `
+      <section class="fr-band" id="frBand" aria-label="Your ${RANGE_WORD[lbRange]}">
+        <div class="fr-band-main">
+          <div class="fr-big" id="frBig">–</div>
+          <div class="fr-big-sub" id="frBigSub">verified ${RANGE_WORD[lbRange]}</div>
+          <div class="fr-facts" id="frFacts"></div>
+        </div>
+        <div class="fr-week" id="frWeek" aria-label="Your last 7 days"></div>
+      </section>
+      <div class="fr-grid">
+        <section class="card fr-board" aria-labelledby="lbH">
+          <div class="fr-board-head"><h2 id="lbH">Leaderboard</h2><span class="fr-legend"><i class="v"></i>verified <i class="f"></i>all focus</span></div>
+          <div id="lb"><div class="sub" style="padding:18px 0">Loading…</div></div>
+        </section>
+        <aside class="card fr-panel" aria-label="Friends">
+          <div class="fr-code">
+            <span class="fr-code-k">Your username</span>
+            <div class="fr-code-row"><b>@${esc(acct.username)}</b><button class="btn sm ghost icon" id="copyMe" title="Copy your username" aria-label="Copy your username">${ic('copy')}</button></div>
+          </div>
+          <form class="add-row" id="addForm"><input type="text" id="addFriend" placeholder="Add by username…" maxlength="20" autocomplete="off" aria-label="Friend's username"><button class="btn sm primary" type="submit">${ic('user-plus')}Add</button></form>
+          <div id="friendList"></div>
+          <div class="acct-row"><span>${ic('cloud')}Signed in as @${esc(acct.username)}</span><button class="btn sm ghost" id="logoutBtn">${ic('logout')}Log out</button></div>
+        </aside>
+      </div>`;
+    $('#copyMe').onclick = () => copyText('@' + acct.username, 'Username');
+    $('#addForm').onsubmit = e => { e.preventDefault(); addFriend(); };
     $('#logoutBtn').onclick = async () => { await api.logout(); toast('Logged out', 'info'); loadFriends(); };
-    renderLeaderboard(); renderFriendList();
+    renderLeaderboard(); renderFriendList(); renderWeek();
   }
+
+  async function renderWeek() {
+    const el = $('#frWeek'); if (!el || !api.my_week) return;
+    let w; try { w = await api.my_week(); } catch (e) { return; }
+    const max = Math.max(1800, ...w.days.map(d => d.focus));
+    el.innerHTML = `<div class="fr-week-bars">${w.days.map(d => `<div class="fw-col" title="${esc(d.label)}: ${dur(d.verified)} verified of ${dur(d.focus)}">
+        <div class="fw-bar"><span class="f" style="height:${d.focus / max * 100}%"></span><span class="v" style="height:${d.verified / max * 100}%"></span></div>
+        <span class="fw-lab">${esc(d.label)}</span></div>`).join('')}</div>
+      <div class="fw-cap">Your last 7 days on this laptop. The leaderboard counts sessions since you signed up.</div>`;
+    const facts = $('#frFacts');
+    if (facts) facts.dataset.cam = w.camera ? 'on' : 'off';
+    paintFacts();
+  }
+
+  let lbLast = null;
+  function paintFacts() {
+    const facts = $('#frFacts'); if (!facts) return;
+    const r = lbLast, me = r && r.rows ? r.rows.find(x => x.me) : null;
+    const rank = r && r.rows ? r.rows.findIndex(x => x.me) + 1 : 0, n = r && r.rows ? r.rows.length : 0;
+    const cam = facts.dataset.cam === 'on';
+    facts.innerHTML = `
+      ${me ? `<span class="fact"><b>${dur(me.focus_s)}</b> focus</span>` : ''}
+      ${n > 1 ? `<span class="fact"><b>#${rank}</b> of ${n}</span>` : ''}
+      ${me && me.streak ? `<span class="fact">${ic('flame')}<b>${me.streak}</b> day streak</span>` : ''}
+      <button class="cam-pill ${cam ? 'on' : ''}" id="camPill">${ic('camera')}${cam ? 'Camera check on' : 'Camera check off · turn on'}</button>`;
+    $('#camPill').onclick = async () => {
+      if (cam) { go('settings'); return; }
+      if (!(await camPermission())) return;
+      settings.camera_check = true; await api.set_setting('camera_check', true); syncCamera();
+      toast('Camera check on. Your focus now counts as verified.', 'success');
+      facts.dataset.cam = 'on'; paintFacts();
+    };
+    if (me) {
+      countTo($('#frBig'), me.verified_s, dur, 700);
+      $('#frBigSub').textContent = `verified ${RANGE_WORD[lbRange]}`;
+    }
+  }
+
   async function renderLeaderboard() {
     const r = await api.leaderboard(lbRange), el = $('#lb'); if (!el) return;
-    if (r.error) { el.innerHTML = `<div class="empty-state"><div class="h">Can't load the leaderboard</div>${esc(r.error)}</div>`; return; }
+    if (r.error) { el.innerHTML = `<div class="empty-state small"><div class="h">Can't load the leaderboard</div>${esc(r.error)}</div>`; return; }
+    lbLast = r; paintFacts();
     const rows = r.rows || [], max = Math.max(1, ...rows.map(x => x.focus_s));
-    if (rows.length < 2) {
-      el.innerHTML = lbRows(rows, max) + `<div class="empty-state small"><div class="h">It's just you so far</div>Add friends by username and you'll compete here.</div>`;
-      return;
-    }
-    el.innerHTML = lbRows(rows, max);
+    el.innerHTML = `<ol class="lanes">${rows.map((x, i) => `<li class="lane ${x.me ? 'me' : ''}" style="--i:${i}">
+        <span class="rk ${i === 0 && x.verified_s > 0 && rows.length > 1 ? 'top' : ''}">${i === 0 && x.verified_s > 0 && rows.length > 1 ? ic('crown') : i + 1}</span>
+        <span class="av">${initial(x.display)}</span>
+        <span class="lane-main">
+          <span class="lane-who"><b>${esc(x.me ? 'You' : x.display)}</b><small>@${esc(x.username)}${x.streak ? ` · ${x.streak}d streak` : ''}</small></span>
+          <span class="lane-track"><i class="f" style="width:${x.focus_s / max * 100}%"></i><i class="v" style="width:${x.verified_s / max * 100}%"></i></span>
+        </span>
+        <span class="lane-num"><b>${dur(x.verified_s)}</b><small>of ${dur(x.focus_s)}</small></span></li>`).join('')}</ol>`
+      + (rows.length < 2 ? invite() : '');
+    $$('[data-copy]', el).forEach(b => b.onclick = () => copyText(b.dataset.copy, b.dataset.what));
   }
-  function lbRows(rows, max) {
-    return rows.map((x, i) => `<div class="lb-row ${x.me ? 'me' : ''}" style="--i:${i}">
-      <div class="rk ${i === 0 && x.verified_s > 0 ? 'top' : ''}">${i === 0 && x.verified_s > 0 ? ic('crown') : i + 1}</div>
-      <div class="av">${initial(x.display)}</div>
-      <div class="who"><b>${esc(x.display)}${x.me ? ' <span class="you">you</span>' : ''}</b><span>@${esc(x.username)}${x.streak ? ` · ${ic('flame')}${x.streak}d` : ''}</span></div>
-      <div class="bars2"><div class="b2 f" style="width:${x.focus_s / max * 100}%"></div><div class="b2 v" style="width:${x.verified_s / max * 100}%"></div></div>
-      <div class="num v" title="Camera-verified focus"><b>${dur(x.verified_s)}</b><span>verified</span></div>
-      <div class="num" title="All focus time"><b>${dur(x.focus_s)}</b><span>focus</span></div></div>`).join('');
+
+  function invite() {
+    return `<div class="invite">
+      <h3>Bring your friends</h3>
+      <p>The leaderboard gets interesting with company. Send them this:</p>
+      <ol class="invite-steps">
+        <li><span>Download hush. from</span><button class="chip-copy" data-copy="${SITE}" data-what="Link">${SITE.replace('https://', '')}${ic('copy')}</button></li>
+        <li><span>Create an account in the Friends tab</span></li>
+        <li><span>Add you as</span><button class="chip-copy" data-copy="@${esc(acct.username)}" data-what="Username">@${esc(acct.username)}${ic('copy')}</button></li>
+      </ol>
+    </div>`;
   }
+
   async function renderFriendList() {
     const r = await api.friends(), el = $('#friendList'); if (!el) return;
     if (r.error) { el.innerHTML = `<div class="sub">${esc(r.error)}</div>`; return; }
-    const row = (u, acts) => `<div class="fr-row"><div class="av sm">${initial(u.display)}</div><div class="who"><b>${esc(u.display)}</b><span>@${esc(u.username)}</span></div>${acts}</div>`;
+    const row = (u, acts) => `<div class="fr-row"><span class="av sm">${initial(u.display)}</span><span class="who"><b>${esc(u.display)}</b><span>@${esc(u.username)}</span></span>${acts}</div>`;
     let h = '';
-    if (r.incoming.length) h += `<div class="fr-h">Requests</div>` + r.incoming.map(u => row(u, `<button class="btn sm primary" data-acc="${esc(u.username)}">Accept</button><button class="btn sm ghost icon" title="Decline" data-rm="${esc(u.username)}">${ic('x')}</button>`)).join('');
-    if (r.friends.length) h += `<div class="fr-h">Friends · ${r.friends.length}</div>` + r.friends.map(u => row(u, `<button class="btn sm ghost icon" title="Remove friend" data-rm="${esc(u.username)}">${ic('x')}</button>`)).join('');
-    if (r.outgoing.length) h += `<div class="fr-h">Waiting for them</div>` + r.outgoing.map(u => row(u, `<span class="tag">pending</span><button class="btn sm ghost icon" title="Cancel" data-rm="${esc(u.username)}">${ic('x')}</button>`)).join('');
-    el.innerHTML = h || '<div class="sub" style="padding:6px 0">No friends yet. Add someone by their username.</div>';
-    $$('[data-acc]', el).forEach(b => b.onclick = async () => { const x = await api.accept_friend(b.dataset.acc); if (x.error) toast(x.error, 'block'); else { toast(`You and @${b.dataset.acc} are friends`, 'success'); renderFriendList(); renderLeaderboard(); } });
+    if (r.incoming.length) h += `<div class="fr-h">Wants to be friends</div>` + r.incoming.map(u => row(u, `<button class="btn sm primary" data-acc="${esc(u.username)}">Accept</button><button class="btn sm ghost icon" title="Decline" aria-label="Decline @${esc(u.username)}" data-rm="${esc(u.username)}">${ic('x')}</button>`)).join('');
+    if (r.friends.length) h += `<div class="fr-h">Friends · ${r.friends.length}</div>` + r.friends.map(u => row(u, `<button class="btn sm ghost icon fr-x" title="Remove friend" aria-label="Remove @${esc(u.username)}" data-rm="${esc(u.username)}">${ic('x')}</button>`)).join('');
+    if (r.outgoing.length) h += `<div class="fr-h">Waiting for them</div>` + r.outgoing.map(u => row(u, `<span class="tag">sent</span><button class="btn sm ghost icon fr-x" title="Cancel request" aria-label="Cancel request to @${esc(u.username)}" data-rm="${esc(u.username)}">${ic('x')}</button>`)).join('');
+    el.innerHTML = h || '<p class="fr-none">No friends yet. Add someone above, or send them the invite on the left.</p>';
+    $$('[data-acc]', el).forEach(b => b.onclick = async () => { const x = await api.accept_friend(b.dataset.acc); if (x.error) toast(x.error, 'block'); else { toast(`You and @${b.dataset.acc} are now friends`, 'success'); renderFriendList(); renderLeaderboard(); } });
     $$('[data-rm]', el).forEach(b => b.onclick = async () => { await api.remove_friend(b.dataset.rm); renderFriendList(); renderLeaderboard(); });
   }
+
   async function addFriend() {
     const inp = $('#addFriend'), name = inp.value.trim().replace(/^@/, '').toLowerCase();
     if (!name) return;
