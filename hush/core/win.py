@@ -320,8 +320,15 @@ def style_caption(caption="#EBE5D9", text="#1F3550", skip=("mini",)):
             dwm.DwmSetWindowAttribute(h, 35, ctypes.byref(cref(caption)), 4)  # DWMWA_CAPTION_COLOR
             dwm.DwmSetWindowAttribute(h, 34, ctypes.byref(cref(caption)), 4)  # DWMWA_BORDER_COLOR
             dwm.DwmSetWindowAttribute(h, 36, ctypes.byref(cref(text)), 4)     # DWMWA_TEXT_COLOR
+            if hwnd not in _STYLED:
+                # Windows only repaints the caption on a frame change; without this it stays dark until resized
+                _STYLED.add(hwnd)
+                user32.SetWindowPos(h, None, 0, 0, 0, 0, 0x0001 | 0x0002 | 0x0004 | 0x0010 | 0x0020)
     except Exception:
         pass
+
+
+_STYLED = set()
 
 
 # ---------- app identity, window icon, shortcuts ----------

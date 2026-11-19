@@ -123,6 +123,21 @@ class Api:
     def leaderboard(self, rng="week"):
         return self._cloud_call(lambda c: c.leaderboard(rng if rng in ("day", "week", "month") else "week"))
 
+    def my_week(self):
+        """Your last 7 days from local sessions: focus and camera-verified seconds per day (for the Friends band)."""
+        from datetime import date, datetime, timedelta
+        today = date.today()
+        out = []
+        for i in range(6, -1, -1):
+            d = today - timedelta(days=i)
+            a = datetime.combine(d, datetime.min.time()).timestamp()
+            rows = self._ctx["db"].focus_between(a, a + 86400)
+            focus = sum(min(max(0, (r["end"] or 0) - (r["start"] or 0)), (r["planned"] or 0) or 1e9) for r in rows)
+            verified = sum(r.get("verified") or 0 for r in rows)
+            out.append({"label": "Today" if i == 0 else d.strftime("%a"), "focus": round(focus), "verified": round(min(verified, focus))})
+        cam = bool(self._settings().get("camera_check"))
+        return {"days": out, "camera": cam}
+
     # ---------- camera study check ----------
     def presence(self, state):
         """The UI's camera check reports present / away / phone every couple of seconds during focus."""

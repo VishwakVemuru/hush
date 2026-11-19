@@ -46,6 +46,7 @@
     friends: async () => ({ friends: [{ username: 'maya_r', display: 'Maya' }, { username: 'dev_k', display: 'Dev' }, { username: 'sam', display: 'Sam' }], incoming: [{ username: 'rhea', display: 'Rhea' }], outgoing: [{ username: 'arjun', display: 'Arjun' }] }),
     add_friend: async () => ({ ok: true, status: 'pending' }), accept_friend: async () => ({ ok: true }), remove_friend: async () => ({ ok: true }),
     presence: async () => true,
+    my_week: async () => ({ camera: false, days: ['Thu', 'Fri', 'Sat', 'Sun', 'Mon', 'Tue', 'Today'].map((label, i) => ({ label, focus: [5400, 7200, 1800, 0, 9000, 6600, 4200][i], verified: [4100, 6000, 900, 0, 7600, 5200, 3000][i] })) }),
     save_image: async () => 'C:\\Users\\you\\Downloads\\hush.png', set_fullscreen: async () => true,
     phone_link: async () => ({ ip: '192.168.1.20', port: 47322, code: '12345678', connected: true, phone: 'Pixel', running: true }),
     set_category: async () => true, export_csv: async () => 'C:\\Users\\you\\Downloads',
