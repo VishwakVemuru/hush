@@ -399,15 +399,40 @@
       loadStats._pulled = Date.now();
       if (api.cloud_refresh) api.cloud_refresh().then(r => { if (r && r.changed && view === 'stats') loadStats(); syncNote(r && r.status); }).catch(() => {});
     }
-    const st = await api.stats(range, source);
+    if (range !== 'day') dayOffset = 0;
+    const st = await api.stats(range, source, dayOffset);
     lastStats = st;
-    const today = new Date().toLocaleDateString(undefined, { weekday: 'long', day: 'numeric', month: 'long' });
-    $('#statsTitle').textContent = { day: 'Today', week: 'This week', month: 'Last 30 days' }[range];
-    $('#statsSub').textContent = (range === 'day' ? today : 'Where your time went') + ' · ' + SRC_NAME[source];
+    const picked = new Date(); picked.setDate(picked.getDate() - dayOffset);
+    const long = picked.toLocaleDateString(undefined, { weekday: 'long', day: 'numeric', month: 'long' });
+    $('#statsTitle').textContent = range === 'day' ? (dayOffset === 0 ? 'Today' : dayOffset === 1 ? 'Yesterday' : long.split(',')[0]) : { week: 'This week', month: 'Last 30 days' }[range];
+    $('#statsSub').textContent = (range === 'day' ? long : 'Where your time went') + ' · ' + SRC_NAME[source];
+    renderDayStrip();
     renderCards(st);
     if (source === 'phone' && !st.has_phone) { renderNoPhone(); return; }
     $$('.stats-grid, #apps').forEach(e => e.closest('.card, .stats-grid').style.display = '');
     renderBars(st); renderCats(st); renderApps(st);
+  }
+
+  // ---- day picker: today, yesterday, and every day back to a month ago ----
+  let dayOffset = 0, dayTotals = null, dayTotalsKey = '';
+  async function renderDayStrip() {
+    const el = $('#dayStrip'); if (!el) return;
+    el.hidden = range !== 'day';
+    if (range !== 'day' || !api.day_totals) return;
+    const key = source + '|' + new Date().toDateString();
+    if (!dayTotals || dayTotalsKey !== key || dayOffset === 0) { try { dayTotals = await api.day_totals(source); dayTotalsKey = key; } catch (e) { return; } }
+    const max = Math.max(1, ...dayTotals.map(d => d.total));
+    // oldest on the left, today on the right, like a timeline
+    el.innerHTML = `<button class="ds-step" data-step="1" aria-label="Previous day" ${dayOffset >= dayTotals.length - 1 ? 'disabled' : ''}>${ic('chev-left')}</button>
+      <div class="ds-track" role="listbox" aria-label="Pick a day">${dayTotals.slice().reverse().map(d => `
+        <button class="ds-day ${d.offset === dayOffset ? 'on' : ''} ${d.total ? '' : 'empty'}" role="option" aria-selected="${d.offset === dayOffset}" data-off="${d.offset}" title="${esc(d.long)}: ${dur(d.total)}">
+          <span class="ds-bar"><i style="height:${Math.max(d.total ? 6 : 0, d.total / max * 100)}%"></i></span>
+          <span class="ds-lab">${esc(d.label)}</span><span class="ds-tot">${d.total ? dur(d.total) : '–'}</span></button>`).join('')}</div>
+      <button class="ds-step" data-step="-1" aria-label="Next day" ${dayOffset <= 0 ? 'disabled' : ''}>${ic('chev-right')}</button>`;
+    const track = $('.ds-track', el), on = $('.ds-day.on', el);
+    if (on) track.scrollLeft = on.offsetLeft - track.clientWidth / 2 + on.offsetWidth / 2;
+    $$('.ds-day', el).forEach(b => b.onclick = () => { dayOffset = +b.dataset.off; loadStats(); });
+    $$('.ds-step', el).forEach(b => b.onclick = () => { dayOffset = Math.max(0, Math.min(dayTotals.length - 1, dayOffset + +b.dataset.step)); loadStats(); });
   }
 
   function renderNoPhone() {
@@ -609,47 +634,77 @@
   }
 
   /* ---------- camera study check ---------- */
-  const CAM_TXT = { present: 'verified · at your desk', away: 'away from desk', phone: 'phone spotted' };
-  let camErrShown = false, camLastSent = 0;
+  const CAM_TXT = { present: 'verified · face in view', away: 'face not in view · not counted', phone: 'phone spotted · not counted' };
+  let camErrShown = false, camLastSent = 0, camFloat = null, camTesting = false;
+  const lsGet = (k, d) => { try { const v = localStorage.getItem(k); return v == null ? d : v; } catch (e) { return d; } };
+  const lsSet = (k, v) => { try { localStorage.setItem(k, v); } catch (e) {} };
+  const inFocus = () => !!(S && S.phase === 'focus' && !S.paused);
   async function camPermission() {
-    try { await Presence.start(); if (!(S && S.phase === 'focus' && !S.paused)) Presence.stop(); return true; }
+    try { await Presence.start(); if (!inFocus() && !camTesting) Presence.stop(); return true; }
     catch (e) {
       toast(e && e.name === 'NotAllowedError' ? 'Camera access was blocked. Allow it and try again.' : 'Couldn\'t start the camera: ' + (e && e.message || e), 'block');
       return false;
     }
   }
+  function badge(st) {
+    const b = $('#camBadge'); if (!b || b.hidden) return;
+    const showing = lsGet('hush.camview', '1') === '1';
+    b.className = 'cam-badge ' + (st || 'present');
+    b.innerHTML = `${ic('camera')}<span>${CAM_TXT[st] || 'starting camera…'}</span><em>${showing ? 'hide view' : 'show view'}</em>`;
+    b.title = showing ? 'Hide the live camera view' : 'Show what the camera sees';
+  }
+  function syncFloat(want) {
+    const show = want && lsGet('hush.camview', '1') === '1';
+    if (show && !camFloat) {
+      const el = document.createElement('div');
+      el.className = 'cam-float';
+      el.innerHTML = `<div class="cf-view"></div><button class="cf-x" aria-label="Hide camera view" title="Hide camera view">${ic('x')}</button>`;
+      document.body.appendChild(el);
+      camFloat = { el, view: new CamView($('.cf-view', el), { counting: inFocus }) };
+      $('.cf-x', el).onclick = () => { lsSet('hush.camview', '0'); syncCamera(); };
+    } else if (!show && camFloat) {
+      camFloat.view.destroy(); camFloat.el.remove(); camFloat = null;
+    }
+  }
   function syncCamera() {
     if (!window.Presence) return;
-    const want = !!settings.camera_check && S && S.phase === 'focus' && !S.paused;
+    const want = !!settings.camera_check && inFocus();
     if (want && !Presence.running) Presence.start().then(() => { camErrShown = false; }).catch(e => {
       if (!camErrShown) { camErrShown = true; toast('Study check couldn\'t use the camera, so this session counts as unverified.', 'block'); }
     });
-    if (!want && Presence.running && !$('.cam-test')) Presence.stop();
+    if (!want && Presence.running && !camTesting) Presence.stop();
     const b = $('#camBadge');
     b.hidden = !want;
-    if (want) {
-      const st = Presence.state || 'present';
-      b.className = 'cam-badge ' + st;
-      b.innerHTML = `${ic('camera')}<span>${CAM_TXT[st] || 'starting camera…'}</span>`;
-    }
+    if (want) badge(Presence.state);
+    syncFloat(want);
   }
   if (window.Presence) Presence.on(st => {
     if (!st) return;
     // tell the focus engine (it counts verified / away / phone seconds)
     const now = Date.now();
     if (now - camLastSent > 1200) { camLastSent = now; try { api.presence(st); } catch (e) {} }
-    const b = $('#camBadge'); if (b && !b.hidden) { b.className = 'cam-badge ' + st; b.innerHTML = `${ic('camera')}<span>${CAM_TXT[st]}</span>`; }
+    badge(st);
+  });
+  document.addEventListener('click', e => {
+    if (!e.target.closest('#camBadge')) return;
+    lsSet('hush.camview', lsGet('hush.camview', '1') === '1' ? '0' : '1');
+    syncCamera();
   });
   function camTest() {
-    modal(`<h2>Camera check</h2><p>This is what the study check sees. Nothing is recorded.</p>
-      <div class="cam-test"><video id="camVid" autoplay muted playsinline></video><div class="cam-live" id="camLive">starting…</div></div>
+    camTesting = true;
+    modal(`<h2>What the camera sees</h2><p>A minute counts only while your face is in view and no phone is out. Nothing is recorded or sent anywhere.</p>
+      <div class="cam-test" id="camTestView"></div>
+      <p class="cam-key"><span><i class="ok"></i>Studying</span><span><i class="bad"></i>Phone or distracted</span><span><i class="soft"></i>Body but no face (not counted)</span></p>
       <div class="acts"><button class="btn primary" data-x>Done</button></div>`, (s, close) => {
-      const v = $('#camVid', s); Presence.preview(v);
       const wasRunning = Presence.running;
-      const off = Presence.on((st, d) => { const l = $('#camLive', s); if (l) l.innerHTML = `<b class="${st}">${CAM_TXT[st] || st}</b><span>face ${d.face ? '✓' : '–'} · person ${d.person ? '✓' : '–'} · phone ${d.phone ? '✓' : '–'}</span>`; });
-      Presence.start().catch(e => { $('#camLive', s).textContent = 'Camera unavailable: ' + (e && e.message || e); });
-      const done = () => { off(); Presence.preview(null); if (!wasRunning) Presence.stop(); syncCamera(); close(); };
+      const view = new CamView($('#camTestView', s), { counting: () => true });
+      Presence.start().then(() => view.attach()).catch(e => { $('#camTestView', s).innerHTML = `<div class="cv-err">Camera unavailable: ${esc(e && e.message || e)}</div>`; });
+      let closed = false;
+      const done = () => { if (closed) return; closed = true; view.destroy(); camTesting = false; if (!wasRunning && !(settings.camera_check && inFocus())) Presence.stop(); syncCamera(); close(); };
       $('[data-x]', s).onclick = done;
+      // closing with Esc or the backdrop also has to release the camera
+      const mo = new MutationObserver(() => { if (!document.body.contains(s)) { mo.disconnect(); done(); } });
+      mo.observe(document.body, { childList: true });
     });
   }
 
@@ -907,7 +962,7 @@
       </div>
       <div class="card">
         <p class="label"><span>Study check</span></p>
-        <div class="set-row"><div><div class="t">Camera study check</div><div class="d">During focus, your webcam checks you're at your desk and not on your phone. Those minutes count as <b>verified</b> on the Friends leaderboard. It all runs on this laptop: no video or pictures are saved or sent anywhere.</div></div>${sw(!!s.camera_check, 'id="camT"')}</div>
+        <div class="set-row"><div><div class="t">Camera study check</div><div class="d">During focus, your webcam checks your face is in view and you're not on your phone. Those minutes count as <b>verified</b> on the Friends leaderboard. It all runs on this laptop: no video or pictures are saved or sent anywhere.</div></div>${sw(!!s.camera_check, 'id="camT"')}</div>
         <div class="set-row"><div><div class="t">Test the camera</div><div class="d">See what the check sees, before a session</div></div><button class="btn sm" id="camTest">${ic('camera')}Test</button></div>
       </div>
       <div class="card" id="phoneCard">

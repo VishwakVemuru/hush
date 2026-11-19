@@ -329,6 +329,43 @@ def style_caption(caption="#EBE5D9", text="#1F3550", skip=("mini",)):
 
 
 _STYLED = set()
+_PERM_HANDLERS = []  # keep .NET delegates alive
+
+
+def allow_own_camera(pywebview_window, timeout=20):
+    """Answer the window's camera prompt ourselves: allow it for hush's own local pages only.
+    The study check is already opt-in inside hush, and a stray 'Deny' on WebView2's prompt would otherwise stick forever."""
+    if not IS_WIN:
+        return
+    import time
+    deadline = time.time() + timeout
+    while time.time() < deadline:
+        form = getattr(pywebview_window, "native", None)
+        wv = getattr(getattr(form, "browser", None), "webview", None) if form else None
+        if wv is not None and getattr(wv, "CoreWebView2", None) is not None:
+            break
+        time.sleep(0.5)
+    else:
+        return
+    try:
+        from System import Action  # pythonnet
+        from Microsoft.Web.WebView2.Core import CoreWebView2PermissionKind, CoreWebView2PermissionState
+
+        def on_permission(sender, args):
+            try:
+                uri = str(args.Uri or "")
+                if args.PermissionKind == CoreWebView2PermissionKind.Camera and uri.startswith(("http://127.0.0.1", "http://localhost")):
+                    args.State = CoreWebView2PermissionState.Allow
+            except Exception:
+                pass
+
+        def attach():
+            wv.CoreWebView2.PermissionRequested += on_permission
+
+        _PERM_HANDLERS.append(on_permission)
+        form.Invoke(Action(attach))
+    except Exception:
+        pass
 
 
 # ---------- app identity, window icon, shortcuts ----------

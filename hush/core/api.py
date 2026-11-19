@@ -76,13 +76,21 @@ class Api:
         return True
 
     # ---------- stats ----------
-    def stats(self, rng="day", source="laptop"):
+    def stats(self, rng="day", source="laptop", offset=0):
         c = self._ctx
         cloud = c.get("cloud")
         over = c["db"].categories()
         recat = lambda name, cat: over.get(name) or cat  # noqa: E731  (your category edits apply to phone apps too)
         return stats.compute(c["db"], rng, c["categorize"], source,
-                             cloud.phone_cache() if cloud else {}, recat)
+                             cloud.phone_cache() if cloud else {}, recat, offset)
+
+    def day_totals(self, source="laptop"):
+        """Screen time per day for the last 30 days (the day picker on Stats)."""
+        c = self._ctx
+        cloud = c.get("cloud")
+        over = c["db"].categories()
+        return stats.day_totals(c["db"], c["categorize"], source, cloud.phone_cache() if cloud else {},
+                                lambda name, cat: over.get(name) or cat)
 
     # ---------- account, friends, leaderboard ----------
     def _cloud_call(self, fn, *a):

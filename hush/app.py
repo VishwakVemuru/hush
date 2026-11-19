@@ -91,6 +91,12 @@ def main():
     blocker = Blocker(db, engine, hub)
     if not engine.blocking_active():
         blocker.cleanup()  # crash-safety: never leave sites blocked after a crash
+    try:
+        removed = db.prune_usage(30)  # screen time is kept for one month
+        if removed:
+            log.info("removed %d screen-time records older than 30 days", removed)
+    except Exception:
+        log.exception("prune")
 
     cat_cache = {"t": 0, "map": {}}
 
@@ -314,6 +320,7 @@ def main():
         sync_mini()  # force the pill hidden at launch
         win.set_window_icons(ICO)
         win.style_caption()
+        threading.Thread(target=win.allow_own_camera, args=(main_win,), daemon=True).start()
         if not db.get("shortcuts_v1"):
             if win.create_shortcuts(os.path.join(BASE, "app.py"), ICO):
                 db.set("shortcuts_v1", True)
@@ -340,6 +347,11 @@ def main():
                 last_title = title
                 try:
                     main_win.set_title(title)
+                except Exception:
+                    pass
+            if n % 7200 == 7199:  # about once an hour: drop screen time older than a month
+                try:
+                    db.prune_usage(30)
                 except Exception:
                     pass
             if n % 20 == 3:

@@ -57,6 +57,15 @@ class DB:
     def usage_update(self, rid, end, title):
         self.x("UPDATE usage SET end=?, title=? WHERE id=?", (end, title, rid))
 
+    def prune_usage(self, keep_days=30):
+        """Delete screen-time records older than `keep_days` days (today counts as day 1). Returns rows removed."""
+        import datetime as _dt
+        cutoff = _dt.datetime.combine(_dt.date.today() - _dt.timedelta(days=keep_days - 1), _dt.time.min).timestamp()
+        with self.lock:
+            n = self.c.execute("DELETE FROM usage WHERE end < ?", (cutoff,)).rowcount
+            self.c.execute("UPDATE usage SET start = ? WHERE start < ?", (cutoff, cutoff))  # trim a row that straddles the cutoff
+        return n
+
     def usage_between(self, a, b):
         return self.q("SELECT * FROM usage WHERE end>? AND start<? ORDER BY start", (a, b))
 

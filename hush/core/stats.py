@@ -118,8 +118,29 @@ def overview(db, goal_hours):
     return {"streak": streak, "dots": dots, "focus_today": focus.get(today, 0), "goal": goal}
 
 
-def compute(db, rng, categorize, source="laptop", phone_cache=None, recategorize=None):
+KEEP_DAYS = 30  # screen time is kept for today + the 29 days before it
+
+
+def day_totals(db, categorize, source="laptop", phone_cache=None, recategorize=None):
+    """Screen time for each of the last KEEP_DAYS days, newest first (for the day picker)."""
     today = date.today()
+    first = today - timedelta(days=KEEP_DAYS - 1)
+    lap = laptop_days(db, first, today, categorize) if source in ("laptop", "all") else {}
+    pho = phone_days(phone_cache, first, today, recategorize or (lambda n, c: c)) if source in ("phone", "all") else {}
+    out = []
+    for i in range(KEEP_DAYS):
+        d = today - timedelta(days=i)
+        t = (lap[d]["total"] if d in lap else 0) + (pho[d]["total"] if d in pho else 0)
+        out.append({"offset": i, "date": d.isoformat(), "total": round(t),
+                    "label": "Today" if i == 0 else "Yesterday" if i == 1 else d.strftime("%a %d").replace(" 0", " "),
+                    "long": "Today" if i == 0 else "Yesterday" if i == 1 else d.strftime("%A, %d %B").replace(" 0", " ")})
+    return out
+
+
+def compute(db, rng, categorize, source="laptop", phone_cache=None, recategorize=None, offset=0):
+    # offset picks an earlier day in the Day view (0 = today, 1 = yesterday, ...)
+    offset = max(0, min(KEEP_DAYS - 1, int(offset or 0))) if rng == "day" else 0
+    today = date.today() - timedelta(days=offset)
     source = source if source in SOURCES else "laptop"
     n = {"day": 1, "week": 7, "month": 30}.get(rng, 1)
     first = today - timedelta(days=n - 1)

@@ -237,7 +237,7 @@ class Cloud(threading.Thread):
                 changed = True
             self.since = max(self.since, row.get("updated", 0))
         if changed:
-            cutoff = (today - timedelta(days=60)).isoformat()
+            cutoff = (today - timedelta(days=29)).isoformat()  # same one-month window as the laptop's own screen time
             self.db.set("cloud_phone_days", {k: v for k, v in cache.items() if k >= cutoff})
         self.db.set("cloud_since", self.since)
         self.last_pull = time.time()
