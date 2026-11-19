@@ -4,6 +4,10 @@ name: Mac build
 # and on every published release, where the .dmg is attached to the release.
 on:
   workflow_dispatch:
+    inputs:
+      tag:
+        description: "Release tag to attach the .dmg to (leave empty to only build)"
+        required: false
   release:
     types: [published]
 
@@ -12,7 +16,7 @@ permissions:
 
 jobs:
   build:
-    runs-on: macos-14   # Apple silicon (M1 and newer)
+    runs-on: macos-latest   # Apple silicon (M1 and newer)
     steps:
       - uses: actions/checkout@v4
 
@@ -34,7 +38,7 @@ jobs:
       - name: Build hush.app
         working-directory: hush
         env:
-          HUSH_VERSION: ${{ github.event.release.tag_name || '1.4.0' }}
+          HUSH_VERSION: ${{ github.event.release.tag_name || inputs.tag || '1.4.0' }}
         run: python -m PyInstaller --noconfirm --clean --distpath dist --workpath build packaging/hush-mac.spec
 
       - name: Smoke test (app starts and stays up)
@@ -57,7 +61,8 @@ jobs:
           path: hush/dist/hush-mac.dmg
 
       - name: Attach to the release
-        if: github.event_name == 'release'
+        if: github.event_name == 'release' || inputs.tag != ''
         env:
           GH_TOKEN: ${{ github.token }}
-        run: gh release upload "${{ github.event.release.tag_name }}" hush/dist/hush-mac.dmg --clobber
+          TAG: ${{ github.event.release.tag_name || inputs.tag }}
+        run: gh release upload "$TAG" hush/dist/hush-mac.dmg --clobber
